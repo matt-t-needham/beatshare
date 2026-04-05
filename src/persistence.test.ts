@@ -14,6 +14,8 @@ function makeSong(overrides: Partial<Song> = {}): Song {
     swing: 0,
     timeSignature: [4, 4] as [number, number],
     measures: 1,
+    key: 'C',
+    scale: 'major',
     tracks: [],
     ...overrides,
   };

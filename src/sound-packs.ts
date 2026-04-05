@@ -5,41 +5,35 @@ export interface SoundPackEntry {
   license: string;
   source: string;
   url: string;
-  samples?: string[];  // known sample filenames
+  zipUrl?: string;
+  estimatedSize: string;
+  samples?: string[];
+  repoOwner?: string;
+  repoName?: string;
+  repoBranch?: string;
 }
 
-// Built-in directory of known open-source sample packs
 export const SOUND_PACK_DIRECTORY: SoundPackEntry[] = [
   {
-    id: 'gregharvey-drums',
-    name: 'gregharvey/drum-samples',
-    description: 'Acoustic drum kit samples — kicks, snares, hats, toms, cymbals',
-    license: 'Open source',
+    id: 'fluid-open-drums',
+    name: 'Open Drums (fluid-music)',
+    description: 'TR-707, TR-808, and TR-909 drum machine samples — kicks, snares, hats, toms, cymbals, and more',
+    license: 'Open source (free distribution)',
     source: 'GitHub',
-    url: 'https://github.com/gregharvey/drum-samples',
+    url: 'https://github.com/fluid-music/open-drums',
+    zipUrl: 'https://github.com/fluid-music/open-drums/archive/refs/heads/main.zip',
+    estimatedSize: '~30 MB',
   },
   {
     id: 'pumodi-open-samples',
-    name: 'pumodi/open-samples',
-    description: 'Growing collection of royalty-free instrument samples',
-    license: 'Royalty-free',
+    name: 'Open Samples',
+    description: 'Synths, keyboards, pianos, strings, wind, percussion, and music boxes from vintage hardware',
+    license: 'Open Samples Permissive Use Public License v2',
     source: 'GitHub',
     url: 'https://github.com/pumodi/open-samples',
-  },
-  {
-    id: 'open-source-drumkit',
-    name: 'crabacus/the-open-source-drumkit',
-    description: 'Real Music Media open drumkit — full kit samples',
-    license: 'Open source',
-    source: 'GitHub',
-    url: 'https://github.com/crabacus/the-open-source-drumkit',
-  },
-  {
-    id: 'fluid-open-drums',
-    name: 'fluid-music/open-drums',
-    description: 'Web-optimized drum sample libraries',
-    license: 'Open source',
-    source: 'GitHub',
-    url: 'https://github.com/fluid-music/open-drums',
+    estimatedSize: '~8.5 GB (spin fetches ~1 MB at a time)',
+    repoOwner: 'pumodi',
+    repoName: 'open-samples',
+    repoBranch: 'main',
   },
 ];

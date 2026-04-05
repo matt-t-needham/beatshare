@@ -2,21 +2,27 @@ export type Waveform = 'sine' | 'square' | 'sawtooth' | 'triangle';
 
 export type GridResolution = 4 | 8 | 16 | 32 | 64;
 
+export type MusicalKey = 'C' | 'D' | 'E' | 'F' | 'G' | 'A' | 'B';
+export type ScaleType = 'major' | 'minor';
+
 export interface Step {
   position: number;   // 0-based tick (1 tick = 1/64th note)
   note: number;       // MIDI note number
   velocity: number;   // 0-127
   duration: number;   // in ticks
+  sampleName?: string; // per-step sample override (sample tracks only)
 }
 
 export interface SynthConfig {
   waveform: Waveform;
-  octave: number;     // -7 to +7 offset (0 = middle C area)
+  octave: number;     // -4 to +4 offset (0 = middle C area)
+  decay?: number;     // 0-100, maps to envelope params. Default 50
 }
 
 export interface SampleConfig {
   packId: string;
   sampleName: string;
+  pitchShift?: number; // -2 to +2 octaves (0 = original pitch)
 }
 
 export interface Track {
@@ -36,6 +42,8 @@ export interface Song {
   swing: number;
   timeSignature: [number, number];
   measures: number;
+  key: MusicalKey;
+  scale: ScaleType;
   tracks: Track[];
 }
 
@@ -81,6 +89,14 @@ export function noteNameToMidi(name: string): number {
   return (octave + 1) * 12 + noteIndex;
 }
 
+export interface InstalledPack {
+  id: string;
+  name: string;
+  description: string;
+  license: string;
+  sampleNames: string[];
+}
+
 export function createDefaultSong(): Song {
   return {
     name: 'Untitled',
@@ -88,10 +104,12 @@ export function createDefaultSong(): Song {
     swing: 0,
     timeSignature: [4, 4] as [number, number],
     measures: 1,
+    key: 'C' as MusicalKey,
+    scale: 'major' as ScaleType,
     tracks: [
       {
         id: crypto.randomUUID(),
-        name: 'Synth A',
+        name: 'Synth 1',
         type: 'synth',
         synth: { waveform: 'sawtooth', octave: 0 },
         volume: 0.7,

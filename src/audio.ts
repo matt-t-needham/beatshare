@@ -1,5 +1,6 @@
 import * as Tone from 'tone';
 import type { Song, Track } from './types';
+import { getSample } from './sound-pack-store';
 
 let started = false;
 
@@ -13,18 +14,47 @@ async function ensureStarted() {
 // Map of trackId -> synth instance
 const synths = new Map<string, Tone.Synth>();
 
+/**
+ * Map decay value (0-100) to ADSR envelope parameters.
+ * 0 = percussive click, 50 = default, 100 = long sustain
+ */
+function decayToEnvelope(decay: number): { attack: number; decay: number; sustain: number; release: number } {
+  const t = decay / 100; // 0..1
+  if (t <= 0.5) {
+    // 0→0.5 maps between percussive and default
+    const s = t / 0.5; // 0..1 within first half
+    return {
+      attack: 0.001 + s * 0.009,   // 0.001 → 0.01
+      decay:  0.05  + s * 0.05,    // 0.05  → 0.1
+      sustain: s * 0.3,            // 0     → 0.3
+      release: 0.02 + s * 0.08,    // 0.02  → 0.1
+    };
+  } else {
+    // 0.5→1 maps between default and long
+    const s = (t - 0.5) / 0.5; // 0..1 within second half
+    return {
+      attack: 0.01,                      // stays 0.01
+      decay:  0.1  + s * 0.2,            // 0.1  → 0.3
+      sustain: 0.3 + s * 0.5,            // 0.3  → 0.8
+      release: 0.1 + s * 0.4,            // 0.1  → 0.5
+    };
+  }
+}
+
 function getSynth(track: Track): Tone.Synth {
+  const envelope = decayToEnvelope(track.synth?.decay ?? 50);
   let synth = synths.get(track.id);
   if (!synth) {
     synth = new Tone.Synth({
       oscillator: { type: track.synth?.waveform ?? 'sawtooth' },
-      envelope: { attack: 0.01, decay: 0.1, sustain: 0.3, release: 0.1 },
+      envelope,
     }).toDestination();
     synths.set(track.id, synth);
   }
   if (track.synth) {
     synth.oscillator.type = track.synth.waveform;
   }
+  synth.set({ envelope });
   synth.volume.value = track.muted ? -Infinity : Tone.gainToDb(track.volume);
   return synth;
 }
@@ -36,6 +66,58 @@ export function cleanupSynths(activeTrackIds: Set<string>) {
       synths.delete(id);
     }
   }
+}
+
+// Sample playback — uses BufferSource (polyphonic, fire-and-forget) instead of Player
+const sampleBufferCache = new Map<string, Tone.ToneAudioBuffer>();
+// Gain nodes per track for volume control
+const trackGains = new Map<string, Tone.Gain>();
+
+function sampleKey(packId: string, sampleName: string): string {
+  return `${packId}:${sampleName}`;
+}
+
+async function loadSampleBuffer(packId: string, sampleName: string): Promise<Tone.ToneAudioBuffer | null> {
+  const key = sampleKey(packId, sampleName);
+  if (sampleBufferCache.has(key)) return sampleBufferCache.get(key)!;
+
+  try {
+    const arrayBuffer = await getSample(packId, sampleName);
+    const audioContext = Tone.getContext().rawContext;
+    const audioBuffer = await audioContext.decodeAudioData(arrayBuffer.slice(0));
+    const toneBuffer = new Tone.ToneAudioBuffer(audioBuffer);
+    sampleBufferCache.set(key, toneBuffer);
+    return toneBuffer;
+  } catch {
+    return null;
+  }
+}
+
+function getTrackGain(trackId: string, volume: number, muted: boolean): Tone.Gain {
+  let gain = trackGains.get(trackId);
+  if (!gain) {
+    gain = new Tone.Gain().toDestination();
+    trackGains.set(trackId, gain);
+  }
+  gain.gain.value = muted ? 0 : volume;
+  return gain;
+}
+
+export async function preloadSamples(song: Song): Promise<void> {
+  const promises: Promise<any>[] = [];
+  for (const track of song.tracks) {
+    if (track.type !== 'sample' || !track.sample?.packId) continue;
+    // Collect all unique sample names from steps + the track-level brush
+    const names = new Set<string>();
+    if (track.sample.sampleName) names.add(track.sample.sampleName);
+    for (const step of track.steps) {
+      if (step.sampleName) names.add(step.sampleName);
+    }
+    for (const name of names) {
+      promises.push(loadSampleBuffer(track.sample.packId, name));
+    }
+  }
+  await Promise.all(promises);
 }
 
 let scheduledEvents: number[] = [];
@@ -79,20 +161,39 @@ function scheduleAllEvents(song: Song) {
 
   // Schedule each track's steps
   for (const track of song.tracks) {
-    if (track.type !== 'synth' || track.muted) continue;
-    const synth = getSynth(track);
+    if (track.muted) continue;
 
-    for (const step of track.steps) {
-      if (step.position >= totalTicks) continue;
-
-      const startTime = ticksToSeconds(step.position, bpm);
-      const duration = ticksToSeconds(step.duration, bpm);
-      const freq = Tone.Frequency(step.note, 'midi').toFrequency();
-
-      const eventId = Tone.getTransport().schedule((time) => {
-        synth.triggerAttackRelease(freq, duration, time, step.velocity / 127);
-      }, startTime);
-      scheduledEvents.push(eventId);
+    if (track.type === 'synth') {
+      const synth = getSynth(track);
+      for (const step of track.steps) {
+        if (step.position >= totalTicks) continue;
+        const startTime = ticksToSeconds(step.position, bpm);
+        const duration = ticksToSeconds(step.duration, bpm);
+        const freq = Tone.Frequency(step.note, 'midi').toFrequency();
+        const eventId = Tone.getTransport().schedule((time) => {
+          synth.triggerAttackRelease(freq, duration, time, step.velocity / 127);
+        }, startTime);
+        scheduledEvents.push(eventId);
+      }
+    } else if (track.type === 'sample' && track.sample?.packId) {
+      const packId = track.sample.packId;
+      const gain = getTrackGain(track.id, track.volume, track.muted);
+      for (const step of track.steps) {
+        if (step.position >= totalTicks) continue;
+        const stepSample = step.sampleName ?? track.sample?.sampleName;
+        if (!stepSample) continue;
+        const buffer = sampleBufferCache.get(sampleKey(packId, stepSample));
+        if (!buffer) continue;
+        const startTime = ticksToSeconds(step.position, bpm);
+        const pitchShift = track.sample?.pitchShift ?? 0;
+        const playbackRate = Math.pow(2, pitchShift);
+        const eventId = Tone.getTransport().schedule((time) => {
+          const source = new Tone.ToneBufferSource(buffer).connect(gain);
+          source.playbackRate.value = playbackRate;
+          source.start(time);
+        }, startTime);
+        scheduledEvents.push(eventId);
+      }
     }
   }
 
@@ -140,6 +241,7 @@ function scheduleAllEvents(song: Song) {
  */
 export async function playSong(song: Song) {
   await ensureStarted();
+  await preloadSamples(song);
   stopSong();
 
   Tone.getTransport().bpm.value = song.bpm;
@@ -155,7 +257,8 @@ export async function playSong(song: Song) {
  * Update scheduled notes while transport keeps playing.
  * Cancels and re-schedules all events without stopping transport.
  */
-export function updateScheduledNotes(song: Song) {
+export async function updateScheduledNotes(song: Song) {
+  await preloadSamples(song);
   Tone.getTransport().bpm.value = song.bpm;
   scheduleAllEvents(song);
 }

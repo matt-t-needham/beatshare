@@ -51,14 +51,19 @@ export function useSongStore() {
     }));
   }, []);
 
-  const setStep = useCallback((trackId: string, position: number, note: number, duration: number) => {
+  const setStep = useCallback((trackId: string, position: number, note: number, duration: number, sampleName?: string) => {
     setSong(prev => ({
       ...prev,
       tracks: prev.tracks.map(t => {
         if (t.id !== trackId) return t;
-        if (t.steps.find(s => s.position === position)) return t;
-        const newStep: Step = { position, note, velocity: 100, duration };
-        return { ...t, steps: [...t.steps, newStep] };
+        // For sample tracks, replace existing step (may have different sample)
+        const existing = t.steps.find(s => s.position === position);
+        if (existing && !sampleName) return t;
+        const newStep: Step = { position, note, velocity: 100, duration, ...(sampleName ? { sampleName } : {}) };
+        const steps = existing
+          ? t.steps.map(s => s.position === position ? newStep : s)
+          : [...t.steps, newStep];
+        return { ...t, steps };
       }),
     }));
   }, []);
