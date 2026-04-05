@@ -22,8 +22,11 @@ interface SerializedTrack {
   pk?: string;     // packId (sample)
   sn?: string;     // sampleName (sample)
   ps?: number;     // pitchShift (sample)
+  sd?: number;     // sample decay
   v: number;       // volume
   mu: boolean;     // muted
+  fx?: string;     // effect id
+  fw?: number;     // effect wet
   s: SerializedStep[];
 }
 
@@ -35,7 +38,7 @@ interface SerializedStep {
   sm?: string;     // sampleName (per-step sample override)
 }
 
-function serialize(song: Song): SerializedSong {
+export function serialize(song: Song): SerializedSong {
   return {
     n: song.name,
     b: song.bpm,
@@ -48,15 +51,16 @@ function serialize(song: Song): SerializedSong {
       n: t.name,
       ty: t.type,
       ...(t.synth ? { w: t.synth.waveform, o: t.synth.octave, ...(t.synth.decay != null && t.synth.decay !== 50 ? { dc: t.synth.decay } : {}) } : {}),
-      ...(t.sample ? { pk: t.sample.packId, sn: t.sample.sampleName, ...(t.sample.pitchShift ? { ps: t.sample.pitchShift } : {}) } : {}),
+      ...(t.sample ? { pk: t.sample.packId, sn: t.sample.sampleName, ...(t.sample.pitchShift ? { ps: t.sample.pitchShift } : {}), ...(t.sample.decay != null && t.sample.decay !== 100 ? { sd: t.sample.decay } : {}) } : {}),
       v: t.volume,
       mu: t.muted,
+      ...(t.effect ? { fx: t.effect.id, ...(t.effect.wet != null && t.effect.wet !== 0.5 ? { fw: t.effect.wet } : {}) } : {}),
       s: t.steps.map(s => ({ p: s.position, nt: s.note, vl: s.velocity, d: s.duration, ...(s.sampleName ? { sm: s.sampleName } : {}) })),
     })),
   };
 }
 
-function deserialize(data: SerializedSong): Song {
+export function deserialize(data: SerializedSong): Song {
   return {
     name: data.n || 'Untitled',
     bpm: data.b || 120,
@@ -70,9 +74,10 @@ function deserialize(data: SerializedSong): Song {
       name: t.n || 'Track',
       type: t.ty || 'synth',
       ...(t.ty === 'synth' ? { synth: { waveform: (t.w as any) || 'sawtooth', octave: t.o ?? 0, ...(t.dc != null ? { decay: t.dc } : {}) } } : {}),
-      ...(t.ty === 'sample' ? { sample: { packId: t.pk || '', sampleName: t.sn || '', ...(t.ps ? { pitchShift: t.ps } : {}) } } : {}),
+      ...(t.ty === 'sample' ? { sample: { packId: t.pk || '', sampleName: t.sn || '', ...(t.ps ? { pitchShift: t.ps } : {}), ...(t.sd != null ? { decay: t.sd } : {}) } } : {}),
       volume: t.v ?? 0.7,
       muted: t.mu || false,
+      ...(t.fx ? { effect: { id: t.fx, ...(t.fw != null ? { wet: t.fw } : {}) } } : {}),
       steps: (t.s || []).map((s): Step => ({
         position: s.p,
         note: s.nt,
@@ -112,4 +117,20 @@ export function cleanHash() {
 
 export function getShareUrlLength(song: Song): number {
   return buildShareUrl(song).length;
+}
+
+export function exportToFile(song: Song) {
+  const json = JSON.stringify(serialize(song), null, 2);
+  const blob = new Blob([json], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${song.name || 'beatshare'}.beatshare`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+export function importFromFile(text: string): Song {
+  const data = JSON.parse(text) as SerializedSong;
+  return deserialize(data);
 }

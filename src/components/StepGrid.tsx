@@ -17,9 +17,12 @@ interface StepGridProps {
   onMuteTrack: (trackId: string, muted: boolean) => void;
   onSoloTrack: (trackId: string) => void;
   onRemoveTrack: (trackId: string) => void;
+  onCloneTrack: (track: Track) => void;
   onUpdateTrack: (trackId: string, updates: Partial<Track>) => void;
+  onMoveTrack: (fromIndex: number, toIndex: number) => void;
   installedPacks?: InstalledPack[];
   addTrackSlot?: React.ReactNode;
+  zoom?: number;
 }
 
 export function StepGrid({
@@ -34,9 +37,12 @@ export function StepGrid({
   onMuteTrack,
   onSoloTrack,
   onRemoveTrack,
+  onCloneTrack,
   onUpdateTrack,
+  onMoveTrack,
   installedPacks = [],
   addTrackSlot,
+  zoom = 1,
 }: StepGridProps) {
   const stepSize = ticksPerStep(resolution);
   const totalSteps = resolution * song.measures;
@@ -73,6 +79,26 @@ export function StepGrid({
     prevTrackIdsRef.current = currentIds;
   }, [song.tracks]);
 
+  // Drag reorder state
+  const [dragFromIndex, setDragFromIndex] = useState<number | null>(null);
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+
+  const handleDragStart = useCallback((index: number) => {
+    setDragFromIndex(index);
+  }, []);
+
+  const handleDragOver = useCallback((index: number) => {
+    setDragOverIndex(index);
+  }, []);
+
+  const handleDragEnd = useCallback(() => {
+    if (dragFromIndex !== null && dragOverIndex !== null && dragFromIndex !== dragOverIndex) {
+      onMoveTrack(dragFromIndex, dragOverIndex);
+    }
+    setDragFromIndex(null);
+    setDragOverIndex(null);
+  }, [dragFromIndex, dragOverIndex, onMoveTrack]);
+
   // Drag state for paint/erase
   const dragRef = useRef<{
     trackId: string;
@@ -97,13 +123,15 @@ export function StepGrid({
             No tracks yet. Add one below to get started.
           </div>
         ) : (
-          song.tracks.map(track => (
+          song.tracks.map((track, idx) => (
             <div key={track.id}>
               <TrackRow
                 track={track}
+                index={idx}
                 totalSteps={totalSteps}
                 stepSize={stepSize}
                 stepsPerBeat={stepsPerBeat}
+                cellSize={Math.round(28 * zoom)}
                 selected={track.id === selectedTrackId}
                 soloed={soloTrackId === track.id}
                 currentCol={currentCol}
@@ -113,6 +141,11 @@ export function StepGrid({
                 onMute={() => onMuteTrack(track.id, !track.muted)}
                 onSolo={() => onSoloTrack(track.id)}
                 onRemove={() => onRemoveTrack(track.id)}
+                onClone={() => onCloneTrack(track)}
+                onClear={() => onUpdateTrack(track.id, { steps: [] })}
+                onDragStart={handleDragStart}
+                onDragOver={handleDragOver}
+                onDragEnd={handleDragEnd}
                 onStepMouseDown={(col, isActive) => {
                   const position = col * stepSize;
                   const defaultNote = track.synth ? ((track.synth.octave + 4) * 12 + 24) : 60;
@@ -151,6 +184,7 @@ export function StepGrid({
                     currentCol={currentCol}
                     onSetStep={(trackId, position, note, duration) => onSetStep(trackId, position, note, duration)}
                     onClearStep={onClearStep}
+                    zoom={zoom}
                   />
                 </div>
               )}
@@ -165,9 +199,11 @@ export function StepGrid({
 
 interface TrackRowProps {
   track: Track;
+  index: number;
   totalSteps: number;
   stepSize: number;
   stepsPerBeat: number;
+  cellSize: number;
   selected: boolean;
   soloed: boolean;
   currentCol: number | null;
@@ -177,16 +213,23 @@ interface TrackRowProps {
   onMute: () => void;
   onSolo: () => void;
   onRemove: () => void;
+  onClone: () => void;
+  onClear: () => void;
   onStepMouseDown: (col: number, isActive: boolean) => void;
   onStepMouseEnter: (col: number) => void;
   onRename: (name: string) => void;
+  onDragStart: (index: number) => void;
+  onDragOver: (index: number) => void;
+  onDragEnd: () => void;
 }
 
 function TrackRow({
   track,
+  index,
   totalSteps,
   stepSize,
   stepsPerBeat,
+  cellSize,
   selected,
   soloed,
   currentCol,
@@ -196,12 +239,18 @@ function TrackRow({
   onMute,
   onSolo,
   onRemove,
+  onClone,
+  onClear,
   onStepMouseDown,
   onStepMouseEnter,
   onRename,
+  onDragStart,
+  onDragOver,
+  onDragEnd,
 }: TrackRowProps) {
   const [editing, setEditing] = useState(false);
   const [editName, setEditName] = useState(track.name);
+  const [confirmClear, setConfirmClear] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const startEditing = useCallback(() => {
@@ -238,6 +287,8 @@ function TrackRow({
         selected ? 'bg-zinc-800/70' : 'hover:bg-zinc-800/30'
       }`}
       onClick={onSelect}
+      onDragOver={e => { e.preventDefault(); onDragOver(index); }}
+      onDrop={e => { e.preventDefault(); onDragEnd(); }}
     >
       {/* Top row: icons + label */}
       <div className="flex items-center gap-1 mb-1">
@@ -286,11 +337,41 @@ function TrackRow({
           S
         </button>
         <button
+          onClick={e => { e.stopPropagation(); onClone(); }}
+          className="w-7 h-7 rounded bg-zinc-700 text-zinc-400 hover:bg-purple-600 hover:text-white cursor-pointer flex items-center justify-center border border-zinc-600"
+          title="Clone track"
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+            <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" />
+          </svg>
+        </button>
+        <button
           onClick={e => { e.stopPropagation(); onRemove(); }}
           className="w-7 h-7 rounded bg-zinc-700 text-zinc-400 hover:bg-red-700 hover:text-white cursor-pointer flex items-center justify-center text-sm border border-zinc-600"
           title="Remove track"
         >
           ×
+        </button>
+        <button
+          onClick={e => {
+            e.stopPropagation();
+            if (confirmClear) {
+              onClear();
+              setConfirmClear(false);
+            } else {
+              setConfirmClear(true);
+              setTimeout(() => setConfirmClear(false), 3000);
+            }
+          }}
+          className={`h-7 rounded cursor-pointer flex items-center justify-center text-xs border ${
+            confirmClear
+              ? 'bg-red-700 text-white border-red-600 px-2'
+              : 'bg-zinc-700 text-zinc-400 hover:bg-zinc-600 border-zinc-600 px-2'
+          }`}
+          title="Clear all steps"
+        >
+          {confirmClear ? 'Sure?' : 'Clear'}
         </button>
         {editing ? (
           <input
@@ -311,10 +392,38 @@ function TrackRow({
             {track.name}
           </span>
         )}
+        <div className="flex-1" />
+        <div
+          draggable
+          onDragStart={e => {
+            e.dataTransfer.effectAllowed = 'move';
+            onDragStart(index);
+          }}
+          onDragOver={e => {
+            e.preventDefault();
+            onDragOver(index);
+          }}
+          onDrop={e => {
+            e.preventDefault();
+            onDragEnd();
+          }}
+          onDragEnd={onDragEnd}
+          className="w-7 h-7 rounded bg-zinc-700 hover:bg-zinc-600 cursor-grab active:cursor-grabbing flex items-center justify-center border border-zinc-600 text-zinc-500 hover:text-zinc-300 shrink-0"
+          title="Drag to reorder"
+        >
+          <svg width="10" height="14" viewBox="0 0 10 14" fill="currentColor">
+            <circle cx="3" cy="2" r="1.2" />
+            <circle cx="7" cy="2" r="1.2" />
+            <circle cx="3" cy="7" r="1.2" />
+            <circle cx="7" cy="7" r="1.2" />
+            <circle cx="3" cy="12" r="1.2" />
+            <circle cx="7" cy="12" r="1.2" />
+          </svg>
+        </div>
       </div>
 
       {/* Step cells */}
-      <div className="flex gap-px" onMouseLeave={() => {}}>
+      <div className="flex gap-px overflow-x-auto" onMouseLeave={() => {}}>
         {Array.from({ length: totalSteps }, (_, col) => {
           const active = activeSteps.get(col);
           const isOnBeat = col % stepsPerBeat === 0;
@@ -346,8 +455,9 @@ function TrackRow({
                 onStepMouseDown(col, !!active);
               }}
               onMouseEnter={() => onStepMouseEnter(col)}
+              style={{ width: cellSize, height: cellSize }}
               className={`
-                w-7 h-7 rounded-sm text-[9px] font-mono cursor-pointer transition-colors select-none
+                rounded-sm text-[9px] font-mono cursor-pointer transition-colors select-none shrink-0
                 ${isCurrent ? 'ring-1 ring-purple-400' : ''}
                 ${active ? activeClass : inactiveClass}
               `}

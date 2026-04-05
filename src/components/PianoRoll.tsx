@@ -1,7 +1,7 @@
 import { useMemo, useRef, useEffect, useCallback } from 'react';
 import type { Track, MusicalKey, ScaleType, GridResolution } from '../types';
 import { ticksPerStep, midiNoteToName } from '../types';
-import { getScaleNotes } from '../scales';
+import { getScaleNotes, getCenteredScaleNotes } from '../scales';
 
 interface PianoRollProps {
   track: Track;
@@ -12,6 +12,9 @@ interface PianoRollProps {
   currentCol: number | null;
   onSetStep: (trackId: string, position: number, note: number, duration: number) => void;
   onClearStep: (trackId: string, position: number) => void;
+  zoom?: number;
+  /** Compact mode: 9 rows (4 below + root + 4 above), for sample tracks */
+  compact?: boolean;
 }
 
 export function PianoRoll({
@@ -23,16 +26,21 @@ export function PianoRoll({
   currentCol,
   onSetStep,
   onClearStep,
+  zoom = 1,
+  compact = false,
 }: PianoRollProps) {
   const stepSize = ticksPerStep(resolution);
   const totalSteps = resolution * measures;
   const stepsPerBeat = resolution / 4; // quarter note beats
 
-  // 10 scale notes based on track octave
-  const octave = (track.synth?.octave ?? 0) + 4; // map -4..+4 to 0..8
+  // For synth: 10 scale notes based on track octave
+  // For compact (sample): 9 notes centered on octave 4 root (4 below + root + 4 above)
+  const octave = compact ? 4 : (track.synth?.octave ?? 0) + 4;
   const scaleNotes = useMemo(
-    () => getScaleNotes(songKey, songScale, octave, 10),
-    [songKey, songScale, octave],
+    () => compact
+      ? getCenteredScaleNotes(songKey, songScale, octave, 4, 4)
+      : getScaleNotes(songKey, songScale, octave, 10),
+    [songKey, songScale, octave, compact],
   );
 
   // Reversed for display: highest note at top
@@ -81,6 +89,9 @@ export function PianoRoll({
     }
   }, [track.id, stepSize, onSetStep, onClearStep]);
 
+  const cellW = Math.round(28 * zoom);
+  const cellH = Math.round(14 * zoom);
+
   return (
     <div className="flex gap-0 select-none mt-1">
       {/* Note labels */}
@@ -88,7 +99,8 @@ export function PianoRoll({
         {rows.map(note => (
           <div
             key={note}
-            className="h-3.5 flex items-center justify-end pr-1 text-[9px] font-mono text-zinc-500 w-8"
+            style={{ height: cellH }}
+            className="flex items-center justify-end pr-1 text-[9px] font-mono text-zinc-500 w-8"
           >
             {midiNoteToName(note)}
           </div>
@@ -116,8 +128,9 @@ export function PianoRoll({
                     handleMouseDown(col, note, isActive);
                   }}
                   onMouseEnter={() => handleMouseEnter(col, note)}
+                  style={{ width: cellW, height: cellH }}
                   className={`
-                    w-7 h-3.5 rounded-sm cursor-pointer transition-colors
+                    rounded-sm cursor-pointer transition-colors
                     ${isCurrent ? 'ring-1 ring-purple-400' : ''}
                     ${isActive
                       ? 'bg-purple-500 hover:bg-purple-400'

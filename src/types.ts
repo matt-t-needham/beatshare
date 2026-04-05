@@ -23,6 +23,12 @@ export interface SampleConfig {
   packId: string;
   sampleName: string;
   pitchShift?: number; // -2 to +2 octaves (0 = original pitch)
+  decay?: number;      // 0-100, controls how long the sample plays. Default 100 (full length)
+}
+
+export interface EffectConfig {
+  id: string;        // e.g. 'reverb', 'delay', 'distortion'
+  wet?: number;      // 0-1, default varies by effect
 }
 
 export interface Track {
@@ -33,6 +39,7 @@ export interface Track {
   sample?: SampleConfig;
   volume: number;     // 0-1
   muted: boolean;
+  effect?: EffectConfig;
   steps: Step[];
 }
 

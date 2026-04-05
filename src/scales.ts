@@ -37,6 +37,36 @@ export function getScaleNotes(key: MusicalKey, scale: ScaleType, octave: number,
 }
 
 /**
+ * Generate scale notes centered around a root note: `below` notes below + root + `above` notes above.
+ * Used for sample-track piano rolls (e.g. 4 below + root + 4 above = 9 notes).
+ */
+export function getCenteredScaleNotes(key: MusicalKey, scale: ScaleType, centerOctave: number, below: number, above: number): number[] {
+  const root = KEY_ROOTS[key];
+  const intervals = getIntervals(scale);
+  const centerMidi = (centerOctave + 1) * 12 + root;
+
+  const notes: number[] = [centerMidi];
+
+  // Go down
+  for (let i = 1; i <= below; i++) {
+    const octaveOffset = Math.floor(i / 7);
+    const degreeIdx = 7 - (i % 7 || 7); // walk backwards through scale degrees
+    const midi = centerMidi - octaveOffset * 12 - (12 - intervals[degreeIdx]);
+    if (midi >= 0) notes.unshift(midi);
+  }
+
+  // Go up
+  for (let i = 1; i <= above; i++) {
+    const octaveOffset = Math.floor(i / 7);
+    const degreeIdx = i % 7;
+    const midi = centerMidi + octaveOffset * 12 + intervals[degreeIdx];
+    if (midi <= 127) notes.push(midi);
+  }
+
+  return notes;
+}
+
+/**
  * Find the scale degree (0-6) and octave offset of a MIDI note within a key/scale.
  * Returns null if the note is not in the scale.
  */
@@ -46,7 +76,7 @@ function findScaleDegree(midiNote: number, key: MusicalKey, scale: ScaleType): {
   const pitchClass = ((midiNote % 12) - root + 12) % 12;
   const degree = intervals.indexOf(pitchClass);
   if (degree === -1) return null;
-  const noteOctave = Math.floor(midiNote / 12);
+  const noteOctave = Math.floor((midiNote - root) / 12);
   return { degree, octave: noteOctave };
 }
 
@@ -71,7 +101,9 @@ export function transposeNote(
 }
 
 /**
- * Transpose all synth track steps from one key/scale to another.
+ * Transpose all track steps from one key/scale to another.
+ * For synth tracks: transpose notes and remove any that fall outside the visible piano roll.
+ * For sample tracks: transpose piano-roll-placed notes (note !== 60) and remove out-of-range ones.
  */
 export function transposeAllTracks(
   tracks: Track[],
@@ -81,13 +113,38 @@ export function transposeAllTracks(
   newScale: ScaleType,
 ): Track[] {
   return tracks.map(track => {
-    if (track.type !== 'synth') return track;
-    return {
-      ...track,
-      steps: track.steps.map(step => ({
-        ...step,
-        note: transposeNote(step.note, oldKey, oldScale, newKey, newScale),
-      })),
-    };
+    if (track.type === 'synth') {
+      const octave = (track.synth?.octave ?? 0) + 4;
+      const visibleNotes = getScaleNotes(newKey, newScale, octave, 10);
+      const minNote = visibleNotes[0];
+      const maxNote = visibleNotes[visibleNotes.length - 1];
+      return {
+        ...track,
+        steps: track.steps
+          .map(step => ({
+            ...step,
+            note: transposeNote(step.note, oldKey, oldScale, newKey, newScale),
+          }))
+          .filter(step => step.note >= minNote && step.note <= maxNote),
+      };
+    }
+    if (track.type === 'sample') {
+      const visibleNotes = getCenteredScaleNotes(newKey, newScale, 4, 4, 4);
+      const minNote = visibleNotes[0];
+      const maxNote = visibleNotes[visibleNotes.length - 1];
+      return {
+        ...track,
+        steps: track.steps
+          .map(step => {
+            if (step.note === 60) return step; // grid-placed, no pitch info
+            return {
+              ...step,
+              note: transposeNote(step.note, oldKey, oldScale, newKey, newScale),
+            };
+          })
+          .filter(step => step.note === 60 || (step.note >= minNote && step.note <= maxNote)),
+      };
+    }
+    return track;
   });
 }

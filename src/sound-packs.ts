@@ -22,7 +22,7 @@ export const SOUND_PACK_DIRECTORY: SoundPackEntry[] = [
     source: 'GitHub',
     url: 'https://github.com/fluid-music/open-drums',
     zipUrl: 'https://github.com/fluid-music/open-drums/archive/refs/heads/main.zip',
-    estimatedSize: '~30 MB',
+    estimatedSize: '~12 MB',
   },
   {
     id: 'pumodi-open-samples',

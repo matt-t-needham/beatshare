@@ -78,6 +78,15 @@ export function useSongStore() {
     }));
   }, []);
 
+  const moveTrack = useCallback((fromIndex: number, toIndex: number) => {
+    setSong(prev => {
+      const tracks = [...prev.tracks];
+      const [moved] = tracks.splice(fromIndex, 1);
+      tracks.splice(toIndex, 0, moved);
+      return { ...prev, tracks };
+    });
+  }, []);
+
   const updateStepNote = useCallback((trackId: string, position: number, note: number) => {
     setSong(prev => ({
       ...prev,
@@ -105,6 +114,7 @@ export function useSongStore() {
     setStep,
     clearStep,
     updateStepNote,
+    moveTrack,
     setResolution,
     setSelectedTrackId,
   };

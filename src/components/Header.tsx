@@ -1,7 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import type { SongStore } from '../store';
 import type { GridResolution, MusicalKey, ScaleType } from '../types';
 import { ALL_KEYS, ALL_SCALES } from '../scales';
+import { exportToFile, importFromFile } from '../persistence';
 
 const RESOLUTIONS: { value: GridResolution; label: string }[] = [
   { value: 8, label: '8th' },
@@ -12,16 +13,26 @@ const RESOLUTIONS: { value: GridResolution; label: string }[] = [
 
 interface HeaderProps {
   store: SongStore;
+  playing: boolean;
+  onPlay: () => void;
+  onStop: () => void;
   onShare: () => void;
+  onSaveFile: () => void;
+  onOpenFile: (song: any) => void;
   onExportMidi: () => void;
   onDoubleUp: () => void;
   resolution: GridResolution;
   onResolutionChange: (r: GridResolution) => void;
   onKeyChange: (key: MusicalKey, scale: ScaleType) => void;
+  zoom: number;
+  onZoomChange: (z: number) => void;
 }
 
-export function Header({ store, onShare, onExportMidi, onDoubleUp, resolution, onResolutionChange, onKeyChange }: HeaderProps) {
+const ZOOM_LEVELS = [0.5, 0.75, 1, 1.25, 1.5];
+
+export function Header({ store, playing, onPlay, onStop, onShare, onSaveFile, onOpenFile, onExportMidi, onDoubleUp, resolution, onResolutionChange, onKeyChange, zoom, onZoomChange }: HeaderProps) {
   const { song, updateSong } = store;
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [editingName, setEditingName] = useState(false);
   const [nameInput, setNameInput] = useState(song.name);
 
@@ -78,6 +89,17 @@ export function Header({ store, onShare, onExportMidi, onDoubleUp, resolution, o
         </button>
       )}
 
+      <button
+        onClick={playing ? onStop : onPlay}
+        className={`px-4 py-1.5 rounded font-medium text-sm cursor-pointer ${
+          playing
+            ? 'bg-red-600 hover:bg-red-500 text-white'
+            : 'bg-green-600 hover:bg-green-500 text-white'
+        }`}
+      >
+        {playing ? 'Stop' : 'Play'}
+      </button>
+
       <div className="flex items-center gap-2 ml-4">
         <label className="text-zinc-400 text-sm">BPM</label>
         <input
@@ -127,6 +149,19 @@ export function Header({ store, onShare, onExportMidi, onDoubleUp, resolution, o
       </div>
 
       <div className="flex items-center gap-2">
+        <label className="text-zinc-400 text-sm">Zoom</label>
+        <select
+          value={zoom}
+          onChange={e => onZoomChange(Number(e.target.value))}
+          className="bg-zinc-800 text-white text-sm px-2 py-1 rounded border border-zinc-600 outline-none cursor-pointer"
+        >
+          {ZOOM_LEVELS.map(z => (
+            <option key={z} value={z}>{Math.round(z * 100)}%</option>
+          ))}
+        </select>
+      </div>
+
+      <div className="flex items-center gap-2">
         <label className="text-zinc-400 text-sm">Key</label>
         <select
           value={song.key}
@@ -156,6 +191,36 @@ export function Header({ store, onShare, onExportMidi, onDoubleUp, resolution, o
       >
         Share
       </button>
+      <button
+        className="px-3 py-1.5 bg-zinc-700 hover:bg-zinc-600 text-white text-sm rounded font-medium cursor-pointer"
+        onClick={onSaveFile}
+      >
+        Save
+      </button>
+      <button
+        className="px-3 py-1.5 bg-zinc-700 hover:bg-zinc-600 text-white text-sm rounded font-medium cursor-pointer"
+        onClick={() => fileInputRef.current?.click()}
+      >
+        Open
+      </button>
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".beatshare,.json"
+        className="hidden"
+        onChange={async (e) => {
+          const file = e.target.files?.[0];
+          if (!file) return;
+          try {
+            const text = await file.text();
+            const song = importFromFile(text);
+            onOpenFile(song);
+          } catch {
+            // handled by parent via toast
+          }
+          e.target.value = '';
+        }}
+      />
       <button
         className="px-3 py-1.5 bg-zinc-700 hover:bg-zinc-600 text-white text-sm rounded font-medium cursor-pointer"
         onClick={onExportMidi}

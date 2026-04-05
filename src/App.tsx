@@ -1,12 +1,11 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useSongStore } from './store';
 import { Header } from './components/Header';
-import { Transport } from './components/Transport';
 import { StepGrid } from './components/StepGrid';
 import { AddTrack } from './components/AddTrack';
 import { SoundPacksPanel } from './components/SoundPacksPanel';
-import { playSong, stopSong, setTickCallback, setMetronome, getMetronome, updateScheduledNotes } from './audio';
-import { loadFromHash, cleanHash, buildShareUrl } from './persistence';
+import { playSong, stopSong, setTickCallback, updateScheduledNotes } from './audio';
+import { loadFromHash, cleanHash, buildShareUrl, exportToFile } from './persistence';
 import { exportMidi } from './midi-export';
 import { getInstalledPacks, hasSample } from './sound-pack-store';
 import { SPIN_PACK_ID, fetchMissingSamples } from './spin';
@@ -20,13 +19,13 @@ function App() {
   const [currentTick, setCurrentTick] = useState<number | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [packsOpen, setPacksOpen] = useState(false);
-  const [metronome, setMetronomeState] = useState(getMetronome());
   const [installedPacks, setInstalledPacks] = useState<InstalledPack[]>([]);
   const songRef = useRef(song);
   songRef.current = song;
 
   const [missingDialog, setMissingDialog] = useState<string[] | null>(null);
   const [soloTrackId, setSoloTrackId] = useState<string | null>(null);
+  const [zoom, setZoom] = useState(1); // 0.5, 0.75, 1, 1.25, 1.5
 
   // Load from URL hash on mount
   useEffect(() => {
@@ -158,6 +157,17 @@ function App() {
     showToast('MIDI file downloaded');
   }, []);
 
+  const handleSaveFile = useCallback(() => {
+    exportToFile(songRef.current);
+    showToast('File saved');
+  }, []);
+
+  const handleOpenFile = useCallback((loadedSong: typeof song) => {
+    store.loadSong(loadedSong);
+    showToast('Song loaded from file');
+    checkMissingSamples(loadedSong);
+  }, [store]);
+
   const handleDoubleUp = useCallback(() => {
     const s = songRef.current;
     const oldMeasures = s.measures;
@@ -196,26 +206,24 @@ function App() {
     <div className="h-screen flex flex-col bg-zinc-950 text-white">
       <Header
         store={store}
+        playing={playing}
+        onPlay={handlePlay}
+        onStop={handleStop}
         onShare={handleShare}
+        onSaveFile={handleSaveFile}
+        onOpenFile={handleOpenFile}
         onExportMidi={handleExportMidi}
         onDoubleUp={handleDoubleUp}
         resolution={resolution}
         onResolutionChange={store.setResolution}
         onKeyChange={handleKeyChange}
-      />
-      <Transport
-        playing={playing}
-        onPlay={handlePlay}
-        onStop={handleStop}
-        metronome={metronome}
-        onMetronomeChange={(enabled) => {
-          setMetronome(enabled);
-          setMetronomeState(enabled);
-        }}
+        zoom={zoom}
+        onZoomChange={setZoom}
       />
       <StepGrid
         song={song}
         resolution={resolution}
+        zoom={zoom}
         selectedTrackId={selectedTrackId}
         currentTick={currentTick}
         soloTrackId={soloTrackId}
@@ -226,7 +234,9 @@ function App() {
         onMuteTrack={(id, muted) => store.updateTrack(id, { muted })}
         onSoloTrack={(id) => setSoloTrackId(prev => prev === id ? null : id)}
         onRemoveTrack={store.removeTrack}
+        onCloneTrack={(track) => store.addTrack({ ...track, id: crypto.randomUUID(), name: `${track.name} (copy)` })}
         onUpdateTrack={store.updateTrack}
+        onMoveTrack={store.moveTrack}
         installedPacks={installedPacks}
         addTrackSlot={
           <AddTrack

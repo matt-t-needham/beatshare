@@ -1,6 +1,7 @@
 import * as Tone from 'tone';
-import type { Song, Track } from './types';
+import type { Song, Track, EffectConfig } from './types';
 import { getSample } from './sound-pack-store';
+import { KEY_ROOTS } from './scales';
 
 let started = false;
 
@@ -21,35 +22,158 @@ const synths = new Map<string, Tone.Synth>();
 function decayToEnvelope(decay: number): { attack: number; decay: number; sustain: number; release: number } {
   const t = decay / 100; // 0..1
   if (t <= 0.5) {
-    // 0→0.5 maps between percussive and default
-    const s = t / 0.5; // 0..1 within first half
+    const s = t / 0.5;
     return {
-      attack: 0.001 + s * 0.009,   // 0.001 → 0.01
-      decay:  0.05  + s * 0.05,    // 0.05  → 0.1
-      sustain: s * 0.3,            // 0     → 0.3
-      release: 0.02 + s * 0.08,    // 0.02  → 0.1
+      attack: 0.001 + s * 0.009,
+      decay:  0.05  + s * 0.05,
+      sustain: s * 0.3,
+      release: 0.02 + s * 0.08,
     };
   } else {
-    // 0.5→1 maps between default and long
-    const s = (t - 0.5) / 0.5; // 0..1 within second half
+    const s = (t - 0.5) / 0.5;
     return {
-      attack: 0.01,                      // stays 0.01
-      decay:  0.1  + s * 0.2,            // 0.1  → 0.3
-      sustain: 0.3 + s * 0.5,            // 0.3  → 0.8
-      release: 0.1 + s * 0.4,            // 0.1  → 0.5
+      attack: 0.01,
+      decay:  0.1  + s * 0.2,
+      sustain: 0.3 + s * 0.5,
+      release: 0.1 + s * 0.4,
     };
   }
 }
 
+// --- Per-track audio chain: gain -> effect -> destination ---
+const trackGains = new Map<string, Tone.Gain>();
+const trackEffects = new Map<string, { id: string; node: Tone.ToneAudioNode }>();
+
+function createEffectNode(config: EffectConfig): Tone.ToneAudioNode | null {
+  const wet = config.wet ?? 0.5;
+  switch (config.id) {
+    case 'reverb': {
+      const fx = new Tone.Reverb({ decay: 2.5, preDelay: 0.01 });
+      fx.wet.value = wet;
+      return fx;
+    }
+    case 'delay': {
+      const fx = new Tone.FeedbackDelay({ delayTime: '8n', feedback: 0.3 });
+      fx.wet.value = wet;
+      return fx;
+    }
+    case 'ping-pong': {
+      const fx = new Tone.PingPongDelay({ delayTime: '8n', feedback: 0.3 });
+      fx.wet.value = wet;
+      return fx;
+    }
+    case 'distortion': {
+      const fx = new Tone.Distortion({ distortion: 0.4, oversample: '2x' });
+      fx.wet.value = wet;
+      return fx;
+    }
+    case 'bitcrush': {
+      const fx = new Tone.BitCrusher({ bits: 4 });
+      fx.wet.value = wet;
+      return fx;
+    }
+    case 'chorus': {
+      const fx = new Tone.Chorus({ frequency: 1.5, delayTime: 3.5, depth: 0.7 });
+      fx.wet.value = wet;
+      fx.start();
+      return fx;
+    }
+    case 'phaser': {
+      const fx = new Tone.Phaser({ frequency: 0.5, octaves: 3, stages: 10, Q: 10, baseFrequency: 350 });
+      fx.wet.value = wet;
+      return fx;
+    }
+    case 'tremolo': {
+      const fx = new Tone.Tremolo({ frequency: 4, depth: 0.6 });
+      fx.wet.value = wet;
+      fx.start();
+      return fx;
+    }
+    case 'vibrato': {
+      const fx = new Tone.Vibrato({ frequency: 5, depth: 0.3 });
+      fx.wet.value = wet;
+      return fx;
+    }
+    case 'autofilter': {
+      const fx = new Tone.AutoFilter({ frequency: 1, baseFrequency: 200, octaves: 4 });
+      fx.wet.value = wet;
+      fx.start();
+      return fx;
+    }
+    case 'autowah': {
+      const fx = new Tone.AutoWah({ baseFrequency: 100, octaves: 6, sensitivity: 0, Q: 2 });
+      fx.wet.value = wet;
+      return fx;
+    }
+    default:
+      return null;
+  }
+}
+
+/**
+ * Get or create a track's gain node, wiring through the current effect if any.
+ * Rebuilds the chain when the effect changes.
+ */
+function getTrackOutput(trackId: string, volume: number, muted: boolean, effect?: EffectConfig): Tone.Gain {
+  let gain = trackGains.get(trackId);
+  if (!gain) {
+    gain = new Tone.Gain();
+    trackGains.set(trackId, gain);
+  }
+  gain.gain.value = muted ? 0 : volume;
+
+  // Check if effect changed
+  const currentEffect = trackEffects.get(trackId);
+  const wantedEffectId = effect?.id ?? '';
+
+  if (currentEffect?.id !== wantedEffectId) {
+    // Disconnect old chain
+    gain.disconnect();
+    if (currentEffect) {
+      currentEffect.node.disconnect();
+      currentEffect.node.dispose();
+      trackEffects.delete(trackId);
+    }
+
+    // Build new chain
+    if (effect && wantedEffectId) {
+      const node = createEffectNode(effect);
+      if (node) {
+        gain.connect(node);
+        node.toDestination();
+        trackEffects.set(trackId, { id: wantedEffectId, node });
+      } else {
+        gain.toDestination();
+      }
+    } else {
+      gain.toDestination();
+    }
+  } else if (currentEffect && effect) {
+    // Same effect, update wet
+    const node = currentEffect.node as any;
+    if (node.wet) {
+      node.wet.value = effect.wet ?? 0.5;
+    }
+  }
+
+  return gain;
+}
+
 function getSynth(track: Track): Tone.Synth {
   const envelope = decayToEnvelope(track.synth?.decay ?? 50);
+  const output = getTrackOutput(track.id, 1, false, track.effect);
   let synth = synths.get(track.id);
   if (!synth) {
     synth = new Tone.Synth({
       oscillator: { type: track.synth?.waveform ?? 'sawtooth' },
       envelope,
-    }).toDestination();
+    });
+    synth.connect(output);
     synths.set(track.id, synth);
+  } else {
+    // Reconnect in case the chain changed
+    synth.disconnect();
+    synth.connect(output);
   }
   if (track.synth) {
     synth.oscillator.type = track.synth.waveform;
@@ -68,10 +192,8 @@ export function cleanupSynths(activeTrackIds: Set<string>) {
   }
 }
 
-// Sample playback — uses BufferSource (polyphonic, fire-and-forget) instead of Player
+// Sample playback
 const sampleBufferCache = new Map<string, Tone.ToneAudioBuffer>();
-// Gain nodes per track for volume control
-const trackGains = new Map<string, Tone.Gain>();
 
 function sampleKey(packId: string, sampleName: string): string {
   return `${packId}:${sampleName}`;
@@ -91,16 +213,6 @@ async function loadSampleBuffer(packId: string, sampleName: string): Promise<Ton
   } catch {
     return null;
   }
-}
-
-function getTrackGain(trackId: string, volume: number, muted: boolean): Tone.Gain {
-  let gain = trackGains.get(trackId);
-  if (!gain) {
-    gain = new Tone.Gain().toDestination();
-    trackGains.set(trackId, gain);
-  }
-  gain.gain.value = muted ? 0 : volume;
-  return gain;
 }
 
 export async function preloadSamples(song: Song): Promise<void> {
@@ -177,7 +289,7 @@ function scheduleAllEvents(song: Song) {
       }
     } else if (track.type === 'sample' && track.sample?.packId) {
       const packId = track.sample.packId;
-      const gain = getTrackGain(track.id, track.volume, track.muted);
+      const gain = getTrackOutput(track.id, track.volume, track.muted, track.effect);
       for (const step of track.steps) {
         if (step.position >= totalTicks) continue;
         const stepSample = step.sampleName ?? track.sample?.sampleName;
@@ -185,12 +297,23 @@ function scheduleAllEvents(song: Song) {
         const buffer = sampleBufferCache.get(sampleKey(packId, stepSample));
         if (!buffer) continue;
         const startTime = ticksToSeconds(step.position, bpm);
-        const pitchShift = track.sample?.pitchShift ?? 0;
-        const playbackRate = Math.pow(2, pitchShift);
+        const trackPitchShift = track.sample?.pitchShift ?? 0;
+        // Per-step pitch: if step note differs from default (60), it was placed via piano roll
+        // Shift in semitones relative to song root at octave 4
+        const rootMidi = 60 + KEY_ROOTS[song.key];
+        const noteSemitones = step.note !== 60 ? (step.note - rootMidi) : 0;
+        const playbackRate = Math.pow(2, trackPitchShift + noteSemitones / 12);
+        const sampleDecay = track.sample?.decay ?? 100;
         const eventId = Tone.getTransport().schedule((time) => {
           const source = new Tone.ToneBufferSource(buffer).connect(gain);
           source.playbackRate.value = playbackRate;
           source.start(time);
+          if (sampleDecay < 100) {
+            // Map 0-99 to a duration: 0 = 0.02s, 99 ≈ full buffer length
+            const maxDur = buffer.duration / playbackRate;
+            const dur = 0.02 + (sampleDecay / 100) * (maxDur - 0.02);
+            source.stop(time + dur);
+          }
         }, startTime);
         scheduledEvents.push(eventId);
       }
