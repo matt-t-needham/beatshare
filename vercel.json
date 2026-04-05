@@ -1,0 +1,6 @@
+{
+  "rewrites": [
+    { "source": "/beatShare/:path*", "destination": "/:path*" },
+    { "source": "/beatShare", "destination": "/" }
+  ]
+}
