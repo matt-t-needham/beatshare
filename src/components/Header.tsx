@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import type { SongStore } from '../store';
 import type { GridResolution, MusicalKey, ScaleType } from '../types';
 import { ALL_KEYS, ALL_SCALES } from '../scales';
-import { exportToFile, importFromFile } from '../persistence';
+import { importFromFile } from '../persistence';
 
 const RESOLUTIONS: { value: GridResolution; label: string }[] = [
   { value: 8, label: '8th' },

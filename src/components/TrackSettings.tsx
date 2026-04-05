@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from 'react';
-import type { Track, Waveform, InstalledPack, MusicalKey, ScaleType, GridResolution, EffectConfig } from '../types';
+import type { Track, Waveform, InstalledPack, MusicalKey, ScaleType, GridResolution} from '../types';
 import { ticksPerStep } from '../types';
 import { groupSamplesByCategory, classifySample, friendlyNames } from '../sample-categories';
 import { PianoRoll } from './PianoRoll';
