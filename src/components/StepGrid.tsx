@@ -119,7 +119,7 @@ export function StepGrid({
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const stepRowRefs = useRef<(HTMLDivElement | null)[]>([]);
   const [scrollFade, setScrollFade] = useState(false);
-  const scrollFadeTimer = useRef<ReturnType<typeof setTimeout>>();
+  const scrollFadeTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
 
   const cellSize = Math.round(28 * zoom);
   const totalGridWidth = totalSteps * (cellSize + 1); // cells + gap-px
