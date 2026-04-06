@@ -149,17 +149,17 @@ export function StepGrid({
             <div className="max-w-md text-center space-y-4">
               <h2 className="text-2xl font-bold text-white">Ready to make something dreadful?</h2>
               <p className="text-zinc-300 text-sm">
-                BeatShare is a browser-based music sequencer, light on options and high on speed and sharing — chuck some things together with inbuilt synth engines and open-source samples.
+                BeatShare is a browser-based music sequencer, light on options and high on speed and sharing! Chuck some things together with inbuilt synth engines and open-source samples.
               </p>
               <div className="text-left space-y-3 text-sm text-zinc-400">
                 <div>
-                  <span className="text-zinc-200 font-medium">Sound Packs</span> — Crack open the <span className="text-purple-400">Sound Packs</span> panel down the bottom to grab drum kits and sample packs. 
+                  <span className="text-zinc-200 font-medium">Sound Packs:</span> Crack open the <span className="text-purple-400">Sound Packs</span> panel down the bottom to grab drum kits and sample packs. 
                 </div>
                 <div>
-                  <span className="text-zinc-200 font-medium">Spin &amp; Spin+</span> — <span className="text-purple-400">Spin</span> will fetch you six random samples from the Open Samples repo. <span className="text-purple-400">Spin+</span> grabs a six more for when you're feeling greedy.
+                  <span className="text-zinc-200 font-medium">Spin &amp; Spin+:</span> <span className="text-purple-400">Spin</span> will fetch you six random samples from the Open Samples repo. <span className="text-purple-400">Spin+</span> grabs a six more for when you're feeling greedy.
                 </div>
                 <div>
-                  <span className="text-zinc-200 font-medium">Sharing &amp; Importing</span> — Hit <span className="text-purple-400">Share</span> to copy a link with your whole song baked in (it'll be long!). Save a <code className="text-purple-300">.beatshare</code> file to share it easily, then crack open one from somebody else.
+                  <span className="text-zinc-200 font-medium">Sharing &amp; Importing:</span> Hit <span className="text-purple-400">Share</span> to copy a link with your whole song baked in (it'll be long!). Save a <code className="text-purple-300">.beatshare</code> file to share it easily, then crack open one from somebody else.
                 </div>
               </div>
               <p className="text-zinc-500 text-xs pt-2">
