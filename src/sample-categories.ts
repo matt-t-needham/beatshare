@@ -2,36 +2,63 @@ export interface SampleCategory {
   id: string;
   name: string;
   abbr: string;      // 3-letter abbreviation
-  bgColor: string;   // tailwind bg class for active step
-  hoverColor: string; // tailwind hover bg class
+  color: string;     // hex color for active steps
+  hoverColor: string; // hex color for hover state
   sortOrder: number;
 }
 
+// Neon Jungle Night palette + extensions
+// Core:  #23ce6b (green), #272d2d (dark), #f6f8ff (white), #a846a0 (magenta), #50514f (grey)
+// Extended with complementary neon tones
+const COLORS = {
+  green:    { color: '#23ce6b', hover: '#2ee67a' },
+  magenta:  { color: '#a846a0', hover: '#bf52b6' },
+  coral:    { color: '#e05555', hover: '#e87070' },
+  blue:     { color: '#4488ee', hover: '#5a9bf5' },
+  yellow:   { color: '#d4c844', hover: '#e0d65a' },
+  amber:    { color: '#cc9933', hover: '#d9aa44' },
+  teal:     { color: '#33bbaa', hover: '#44ccbb' },
+  pink:     { color: '#e066a0', hover: '#e880b0' },
+  orange:   { color: '#dd7733', hover: '#e88844' },
+  sky:      { color: '#44aadd', hover: '#55bbee' },
+  violet:   { color: '#8855cc', hover: '#9966dd' },
+  lime:     { color: '#88cc33', hover: '#99dd44' },
+  indigo:   { color: '#5566cc', hover: '#6677dd' },
+  rose:     { color: '#cc4466', hover: '#dd5577' },
+  cyan:     { color: '#33cccc', hover: '#44dddd' },
+  fuchsia:  { color: '#cc44bb', hover: '#dd55cc' },
+  slate:    { color: '#778899', hover: '#8899aa' },
+  grey:     { color: '#50514f', hover: '#666766' },
+};
+
 const CATEGORIES: SampleCategory[] = [
-  { id: 'kick',      name: 'Kick',           abbr: 'Kck', bgColor: 'bg-red-600',     hoverColor: 'hover:bg-red-500',     sortOrder: 0 },
-  { id: 'snare',     name: 'Snare',          abbr: 'Snr', bgColor: 'bg-blue-600',    hoverColor: 'hover:bg-blue-500',    sortOrder: 1 },
-  { id: 'hh-closed', name: 'Hi-Hat Closed',  abbr: 'HHC', bgColor: 'bg-yellow-600',  hoverColor: 'hover:bg-yellow-500',  sortOrder: 2 },
-  { id: 'hh-open',   name: 'Hi-Hat Open',    abbr: 'HHO', bgColor: 'bg-amber-600',   hoverColor: 'hover:bg-amber-500',   sortOrder: 3 },
-  { id: 'crash',     name: 'Crash',          abbr: 'Crs', bgColor: 'bg-green-600',   hoverColor: 'hover:bg-green-500',   sortOrder: 4 },
-  { id: 'ride',      name: 'Ride',           abbr: 'Rid', bgColor: 'bg-teal-600',    hoverColor: 'hover:bg-teal-500',    sortOrder: 5 },
-  { id: 'tom-hi',    name: 'Tom High',       abbr: 'HTm', bgColor: 'bg-indigo-600',  hoverColor: 'hover:bg-indigo-500',  sortOrder: 6 },
-  { id: 'tom-mid',   name: 'Tom Mid',        abbr: 'MTm', bgColor: 'bg-violet-600',  hoverColor: 'hover:bg-violet-500',  sortOrder: 7 },
-  { id: 'tom-low',   name: 'Tom Low',        abbr: 'LTm', bgColor: 'bg-purple-600',  hoverColor: 'hover:bg-purple-500',  sortOrder: 8 },
-  { id: 'clap',      name: 'Clap',           abbr: 'Clp', bgColor: 'bg-pink-600',    hoverColor: 'hover:bg-pink-500',    sortOrder: 9 },
-  { id: 'cowbell',   name: 'Cowbell',        abbr: 'Cow', bgColor: 'bg-orange-600',  hoverColor: 'hover:bg-orange-500',  sortOrder: 10 },
-  { id: 'rimshot',   name: 'Rimshot',        abbr: 'Rim', bgColor: 'bg-slate-500',   hoverColor: 'hover:bg-slate-400',   sortOrder: 11 },
-  { id: 'tambourine',name: 'Tambourine',     abbr: 'Tmb', bgColor: 'bg-lime-600',    hoverColor: 'hover:bg-lime-500',    sortOrder: 12 },
+  { id: 'kick',      name: 'Kick',           abbr: 'Kck', ...COLORS.coral,    sortOrder: 0 },
+  { id: 'snare',     name: 'Snare',          abbr: 'Snr', ...COLORS.blue,     sortOrder: 1 },
+  { id: 'hh-closed', name: 'Hi-Hat Closed',  abbr: 'HHC', ...COLORS.yellow,   sortOrder: 2 },
+  { id: 'hh-open',   name: 'Hi-Hat Open',    abbr: 'HHO', ...COLORS.amber,    sortOrder: 3 },
+  { id: 'crash',     name: 'Crash',          abbr: 'Crs', ...COLORS.green,    sortOrder: 4 },
+  { id: 'ride',      name: 'Ride',           abbr: 'Rid', ...COLORS.teal,     sortOrder: 5 },
+  { id: 'tom-hi',    name: 'Tom High',       abbr: 'HTm', ...COLORS.indigo,   sortOrder: 6 },
+  { id: 'tom-mid',   name: 'Tom Mid',        abbr: 'MTm', ...COLORS.violet,   sortOrder: 7 },
+  { id: 'tom-low',   name: 'Tom Low',        abbr: 'LTm', ...COLORS.magenta,  sortOrder: 8 },
+  { id: 'clap',      name: 'Clap',           abbr: 'Clp', ...COLORS.pink,     sortOrder: 9 },
+  { id: 'cowbell',   name: 'Cowbell',        abbr: 'Cow', ...COLORS.orange,   sortOrder: 10 },
+  { id: 'rimshot',   name: 'Rimshot',        abbr: 'Rim', ...COLORS.slate,    sortOrder: 11 },
+  { id: 'tambourine',name: 'Tambourine',     abbr: 'Tmb', ...COLORS.lime,     sortOrder: 12 },
   // Instrument categories (for synth/sample packs like open-samples)
-  { id: 'piano',     name: 'Piano',          abbr: 'Pno', bgColor: 'bg-emerald-600', hoverColor: 'hover:bg-emerald-500', sortOrder: 13 },
-  { id: 'keys',      name: 'Keys',           abbr: 'Key', bgColor: 'bg-cyan-600',    hoverColor: 'hover:bg-cyan-500',    sortOrder: 14 },
-  { id: 'synth',     name: 'Synth',          abbr: 'Syn', bgColor: 'bg-fuchsia-600', hoverColor: 'hover:bg-fuchsia-500', sortOrder: 15 },
-  { id: 'strings',   name: 'Strings',        abbr: 'Str', bgColor: 'bg-rose-600',    hoverColor: 'hover:bg-rose-500',    sortOrder: 16 },
-  { id: 'wind',      name: 'Wind',           abbr: 'Wnd', bgColor: 'bg-sky-600',     hoverColor: 'hover:bg-sky-500',     sortOrder: 17 },
-  { id: 'vocal',     name: 'Vocal',          abbr: 'Vox', bgColor: 'bg-amber-500',   hoverColor: 'hover:bg-amber-400',   sortOrder: 18 },
-  { id: 'musicbox',  name: 'Music Box',      abbr: 'Box', bgColor: 'bg-yellow-500',  hoverColor: 'hover:bg-yellow-400',  sortOrder: 19 },
-  { id: 'perc',      name: 'Percussion',     abbr: 'Prc', bgColor: 'bg-orange-500',  hoverColor: 'hover:bg-orange-400',  sortOrder: 20 },
-  { id: 'other',     name: 'Other',          abbr: 'Oth', bgColor: 'bg-zinc-500',    hoverColor: 'hover:bg-zinc-400',    sortOrder: 21 },
+  { id: 'piano',     name: 'Piano',          abbr: 'Pno', ...COLORS.green,    sortOrder: 13 },
+  { id: 'keys',      name: 'Keys',           abbr: 'Key', ...COLORS.cyan,     sortOrder: 14 },
+  { id: 'synth',     name: 'Synth',          abbr: 'Syn', ...COLORS.fuchsia,  sortOrder: 15 },
+  { id: 'strings',   name: 'Strings',        abbr: 'Str', ...COLORS.rose,     sortOrder: 16 },
+  { id: 'wind',      name: 'Wind',           abbr: 'Wnd', ...COLORS.sky,      sortOrder: 17 },
+  { id: 'vocal',     name: 'Vocal',          abbr: 'Vox', ...COLORS.amber,    sortOrder: 18 },
+  { id: 'musicbox',  name: 'Music Box',      abbr: 'Box', ...COLORS.yellow,   sortOrder: 19 },
+  { id: 'perc',      name: 'Percussion',     abbr: 'Prc', ...COLORS.orange,   sortOrder: 20 },
+  { id: 'other',     name: 'Other',          abbr: 'Oth', ...COLORS.grey,     sortOrder: 21 },
 ];
+
+// Synth track default color
+export const SYNTH_COLOR = COLORS.magenta;
 
 const CATEGORY_MAP = new Map(CATEGORIES.map(c => [c.id, c]));
 

@@ -314,7 +314,8 @@ export function SoundPacksPanel({ open, onToggle, installedPacks, onPacksChanged
                           return (
                             <span
                               key={name}
-                              className={`text-xs text-white rounded px-1.5 py-0.5 flex items-center gap-1 ${cat.bgColor}`}
+                              className="text-xs text-white rounded px-1.5 py-0.5 flex items-center gap-1"
+                              style={{ backgroundColor: cat.color }}
                               title={name}
                             >
                               {friendlyName(name)}

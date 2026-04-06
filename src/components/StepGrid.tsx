@@ -2,7 +2,7 @@ import { useMemo, useRef, useEffect, useState, useCallback, type KeyboardEvent }
 import type { Song, Track, GridResolution, InstalledPack } from '../types';
 import { ticksPerStep, midiNoteToName } from '../types';
 import { TrackSettings } from './TrackSettings';
-import { classifySample, friendlyName } from '../sample-categories';
+import { classifySample, friendlyName, SYNTH_COLOR } from '../sample-categories';
 
 interface StepGridProps {
   song: Song;
@@ -49,6 +49,7 @@ export function StepGrid({
 
   const currentCol = currentTick !== null ? Math.floor(currentTick / stepSize) : null;
   const stepsPerBeat = resolution / song.timeSignature[1];
+  const stepsPerBar = resolution;
 
   // Track which tracks have expanded settings
   const [expandedTrackIds, setExpandedTrackIds] = useState<Set<string>>(new Set());
@@ -79,26 +80,6 @@ export function StepGrid({
     prevTrackIdsRef.current = currentIds;
   }, [song.tracks]);
 
-  // Drag reorder state
-  const [dragFromIndex, setDragFromIndex] = useState<number | null>(null);
-  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
-
-  const handleDragStart = useCallback((index: number) => {
-    setDragFromIndex(index);
-  }, []);
-
-  const handleDragOver = useCallback((index: number) => {
-    setDragOverIndex(index);
-  }, []);
-
-  const handleDragEnd = useCallback(() => {
-    if (dragFromIndex !== null && dragOverIndex !== null && dragFromIndex !== dragOverIndex) {
-      onMoveTrack(dragFromIndex, dragOverIndex);
-    }
-    setDragFromIndex(null);
-    setDragOverIndex(null);
-  }, [dragFromIndex, dragOverIndex, onMoveTrack]);
-
   // Drag state for paint/erase
   const dragRef = useRef<{
     trackId: string;
@@ -118,6 +99,7 @@ export function StepGrid({
   // Synchronized horizontal scrolling
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const stepRowRefs = useRef<(HTMLDivElement | null)[]>([]);
+  const pianoRollRefs = useRef<(HTMLDivElement | null)[]>([]);
   const [scrollFade, setScrollFade] = useState(false);
   const scrollFadeTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
 
@@ -127,6 +109,9 @@ export function StepGrid({
   const handleScrollbarScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
     const scrollLeft = e.currentTarget.scrollLeft;
     stepRowRefs.current.forEach(el => {
+      if (el) el.scrollLeft = scrollLeft;
+    });
+    pianoRollRefs.current.forEach(el => {
       if (el) el.scrollLeft = scrollLeft;
     });
     setScrollFade(true);
@@ -141,6 +126,8 @@ export function StepGrid({
     }
   }, []);
 
+  const trackCount = song.tracks.length;
+
   return (
     <div className="flex-1 overflow-y-auto px-2 py-2" onWheel={handleGridWheel}>
       <div className="flex flex-col gap-1">
@@ -153,7 +140,7 @@ export function StepGrid({
               </p>
               <div className="text-left space-y-3 text-sm text-zinc-400">
                 <div>
-                  <span className="text-zinc-200 font-medium">Sound Packs:</span> Crack open the <span className="text-purple-400">Sound Packs</span> panel down the bottom to grab drum kits and sample packs. 
+                  <span className="text-zinc-200 font-medium">Sound Packs:</span> Crack open the <span className="text-purple-400">Sound Packs</span> panel down the bottom to grab drum kits and sample packs.
                 </div>
                 <div>
                   <span className="text-zinc-200 font-medium">Spin &amp; Spin+:</span> <span className="text-purple-400">Spin</span> will fetch you six random samples from the Open Samples repo. <span className="text-purple-400">Spin+</span> grabs a six more for when you're feeling greedy.
@@ -173,10 +160,12 @@ export function StepGrid({
               <TrackRow
                 track={track}
                 index={idx}
+                trackCount={trackCount}
                 totalSteps={totalSteps}
                 stepSize={stepSize}
                 stepsPerBeat={stepsPerBeat}
-                cellSize={Math.round(28 * zoom)}
+                stepsPerBar={stepsPerBar}
+                cellSize={cellSize}
                 selected={track.id === selectedTrackId}
                 soloed={soloTrackId === track.id}
                 currentCol={currentCol}
@@ -187,9 +176,8 @@ export function StepGrid({
                 onSolo={() => onSoloTrack(track.id)}
                 onRemove={() => onRemoveTrack(track.id)}
                 onClone={() => onCloneTrack(track)}
-                onDragStart={handleDragStart}
-                onDragOver={handleDragOver}
-                onDragEnd={handleDragEnd}
+                onMoveUp={idx > 0 ? () => onMoveTrack(idx, idx - 1) : undefined}
+                onMoveDown={idx < trackCount - 1 ? () => onMoveTrack(idx, idx + 1) : undefined}
                 stepRowRef={el => { stepRowRefs.current[idx] = el; }}
                 onStepMouseDown={(col, isActive) => {
                   const position = col * stepSize;
@@ -216,7 +204,7 @@ export function StepGrid({
                 onRename={(name) => onUpdateTrack(track.id, { name })}
               />
               {expandedTrackIds.has(track.id) && (
-                <div className="ml-1 mb-1">
+                <div className="mb-1">
                   <TrackSettings
                     track={track}
                     onUpdate={(updates) => onUpdateTrack(track.id, updates)}
@@ -230,6 +218,7 @@ export function StepGrid({
                     onSetStep={(trackId, position, note, duration) => onSetStep(trackId, position, note, duration)}
                     onClearStep={onClearStep}
                     zoom={zoom}
+                    scrollRef={el => { pianoRollRefs.current[idx] = el; }}
                   />
                 </div>
               )}
@@ -260,9 +249,11 @@ export function StepGrid({
 interface TrackRowProps {
   track: Track;
   index: number;
+  trackCount: number;
   totalSteps: number;
   stepSize: number;
   stepsPerBeat: number;
+  stepsPerBar: number;
   cellSize: number;
   selected: boolean;
   soloed: boolean;
@@ -274,21 +265,22 @@ interface TrackRowProps {
   onSolo: () => void;
   onRemove: () => void;
   onClone: () => void;
+  onMoveUp?: () => void;
+  onMoveDown?: () => void;
   onStepMouseDown: (col: number, isActive: boolean) => void;
   onStepMouseEnter: (col: number) => void;
   onRename: (name: string) => void;
-  onDragStart: (index: number) => void;
-  onDragOver: (index: number) => void;
-  onDragEnd: () => void;
   stepRowRef?: (el: HTMLDivElement | null) => void;
 }
 
 function TrackRow({
   track,
   index,
+  trackCount,
   totalSteps,
   stepSize,
   stepsPerBeat,
+  stepsPerBar,
   cellSize,
   selected,
   soloed,
@@ -300,12 +292,11 @@ function TrackRow({
   onSolo,
   onRemove,
   onClone,
+  onMoveUp,
+  onMoveDown,
   onStepMouseDown,
   onStepMouseEnter,
   onRename,
-  onDragStart,
-  onDragOver,
-  onDragEnd,
   stepRowRef,
 }: TrackRowProps) {
   const [editing, setEditing] = useState(false);
@@ -340,14 +331,21 @@ function TrackRow({
     return map;
   }, [track.steps, stepSize]);
 
+  // Get the track's active color (for step cells)
+  const trackColor = useMemo(() => {
+    if (track.type === 'sample' && track.sample?.sampleName) {
+      const cat = classifySample(track.sample.sampleName);
+      return { color: cat.color, hover: cat.hoverColor };
+    }
+    return SYNTH_COLOR;
+  }, [track.type, track.sample?.sampleName]);
+
   return (
     <div
       className={`rounded px-1 py-1 ${
         selected ? 'bg-zinc-800/70' : 'hover:bg-zinc-800/30'
       }`}
       onClick={onSelect}
-      onDragOver={e => { e.preventDefault(); onDragOver(index); }}
-      onDrop={e => { e.preventDefault(); onDragEnd(); }}
     >
       {/* Top row: icons + label */}
       <div className="flex items-center gap-1 mb-1">
@@ -432,33 +430,23 @@ function TrackRow({
           </span>
         )}
         <div className="flex-1" />
-        <div
-          draggable
-          onDragStart={e => {
-            e.dataTransfer.effectAllowed = 'move';
-            onDragStart(index);
-          }}
-          onDragOver={e => {
-            e.preventDefault();
-            onDragOver(index);
-          }}
-          onDrop={e => {
-            e.preventDefault();
-            onDragEnd();
-          }}
-          onDragEnd={onDragEnd}
-          className="w-7 h-7 rounded bg-zinc-700 hover:bg-zinc-600 cursor-grab active:cursor-grabbing flex items-center justify-center border border-zinc-600 text-zinc-500 hover:text-zinc-300 shrink-0"
-          title="Drag to reorder"
+        {/* Up/down reorder buttons */}
+        <button
+          onClick={e => { e.stopPropagation(); onMoveUp?.(); }}
+          disabled={!onMoveUp}
+          className="w-6 h-6 rounded bg-zinc-700 hover:bg-zinc-600 disabled:opacity-30 disabled:cursor-default cursor-pointer flex items-center justify-center border border-zinc-600 text-zinc-400 hover:text-zinc-200 shrink-0"
+          title="Move up"
         >
-          <svg width="10" height="14" viewBox="0 0 10 14" fill="currentColor">
-            <circle cx="3" cy="2" r="1.2" />
-            <circle cx="7" cy="2" r="1.2" />
-            <circle cx="3" cy="7" r="1.2" />
-            <circle cx="7" cy="7" r="1.2" />
-            <circle cx="3" cy="12" r="1.2" />
-            <circle cx="7" cy="12" r="1.2" />
-          </svg>
-        </div>
+          <svg width="10" height="6" viewBox="0 0 10 6" fill="none"><path d="M1 5L5 1L9 5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+        </button>
+        <button
+          onClick={e => { e.stopPropagation(); onMoveDown?.(); }}
+          disabled={!onMoveDown}
+          className="w-6 h-6 rounded bg-zinc-700 hover:bg-zinc-600 disabled:opacity-30 disabled:cursor-default cursor-pointer flex items-center justify-center border border-zinc-600 text-zinc-400 hover:text-zinc-200 shrink-0"
+          title="Move down"
+        >
+          <svg width="10" height="6" viewBox="0 0 10 6" fill="none"><path d="M1 1L5 5L9 1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+        </button>
       </div>
 
       {/* Step cells */}
@@ -466,44 +454,55 @@ function TrackRow({
         {Array.from({ length: totalSteps }, (_, col) => {
           const active = activeSteps.get(col);
           const isOnBeat = col % stepsPerBeat === 0;
+          const isBarStart = col > 0 && col % stepsPerBar === 0;
           const isCurrent = col === currentCol;
 
-          // Determine colors and label — per-step for sample tracks
+          // Per-step color: sample tracks show per-step category color, synth tracks show track color
           const stepSampleName = active?.sampleName;
-          const sampleCat = stepSampleName ? classifySample(stepSampleName) : null;
+          const stepColor = stepSampleName
+            ? classifySample(stepSampleName)
+            : null;
 
-          const activeClass = sampleCat
-            ? `${sampleCat.bgColor} ${sampleCat.hoverColor} text-white`
-            : 'bg-purple-500 hover:bg-purple-400 text-white';
-
-          // Inactive cell colors: slightly darker than selected row background
-          const inactiveClass = selected
-            ? (isOnBeat ? 'bg-zinc-600 hover:bg-zinc-500' : 'bg-zinc-700 hover:bg-zinc-600')
-            : (isOnBeat ? 'bg-zinc-700 hover:bg-zinc-600' : 'bg-zinc-800 hover:bg-zinc-700');
+          const activeColor = stepColor ? stepColor.color : trackColor.color;
+          const activeHover = stepColor ? stepColor.hoverColor : trackColor.hover;
 
           const stepLabel = active
-            ? (sampleCat ? sampleCat.abbr : track.type === 'synth' ? midiNoteToName(active.note).replace(/\d+/, '') : '')
+            ? (stepSampleName ? classifySample(stepSampleName).abbr : track.type === 'synth' ? midiNoteToName(active.note).replace(/\d+/, '') : '')
             : '';
 
           return (
-            <button
-              key={col}
-              onMouseDown={e => {
-                e.preventDefault();
-                e.stopPropagation();
-                onStepMouseDown(col, !!active);
-              }}
-              onMouseEnter={() => onStepMouseEnter(col)}
-              style={{ width: cellSize, height: cellSize }}
-              className={`
-                rounded-sm text-[9px] font-mono cursor-pointer transition-colors select-none shrink-0
-                ${isCurrent ? 'ring-1 ring-purple-400' : ''}
-                ${active ? activeClass : inactiveClass}
-              `}
-              title={active ? (stepSampleName ? friendlyName(stepSampleName) : midiNoteToName(active.note)) : `Step ${col + 1}`}
-            >
-              {stepLabel}
-            </button>
+            <div key={col} className="relative shrink-0" style={{ width: cellSize }}>
+              {/* Bar separator line — overlaid, doesn't displace cell */}
+              {isBarStart && (
+                <div className="absolute left-0 top-0 bottom-0 w-px" style={{ backgroundColor: 'rgba(255,255,255,0.18)', marginLeft: -1 }} />
+              )}
+              <button
+                onMouseDown={e => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  onStepMouseDown(col, !!active);
+                }}
+                onMouseEnter={() => onStepMouseEnter(col)}
+                style={{
+                  width: cellSize,
+                  height: cellSize,
+                  backgroundColor: active ? activeColor : undefined,
+                }}
+                className={`
+                  rounded-sm text-[9px] font-mono cursor-pointer transition-colors select-none text-white
+                  ${isCurrent ? 'ring-1 ring-purple-400' : ''}
+                  ${!active ? (selected
+                    ? (isOnBeat ? 'bg-zinc-600 hover:bg-zinc-500' : 'bg-zinc-700 hover:bg-zinc-600')
+                    : (isOnBeat ? 'bg-zinc-700 hover:bg-zinc-600' : 'bg-zinc-800 hover:bg-zinc-700')
+                  ) : ''}
+                `}
+                onMouseOver={active ? (e) => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = activeHover; } : undefined}
+                onMouseOut={active ? (e) => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = activeColor; } : undefined}
+                title={active ? (stepSampleName ? friendlyName(stepSampleName) : midiNoteToName(active.note)) : `Step ${col + 1}`}
+              >
+                {stepLabel}
+              </button>
+            </div>
           );
         })}
       </div>

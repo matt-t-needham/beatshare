@@ -216,7 +216,7 @@ export function Header({ store, playing, onPlay, onStop, onShare, onSaveFile, on
       </button>
 
       <button
-        className="px-3 py-1.5 bg-purple-600 hover:bg-purple-500 text-white text-sm rounded font-medium cursor-pointer"
+        className="px-3 py-1.5 bg-zinc-700 hover:bg-zinc-600 text-white text-sm rounded font-medium cursor-pointer"
         onClick={onShare}
       >
         Share

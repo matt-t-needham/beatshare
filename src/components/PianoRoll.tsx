@@ -15,6 +15,8 @@ interface PianoRollProps {
   zoom?: number;
   /** Compact mode: 9 rows (4 below + root + 4 above), for sample tracks */
   compact?: boolean;
+  /** Ref callback to register the grid container for synchronized scrolling */
+  scrollRef?: (el: HTMLDivElement | null) => void;
 }
 
 export function PianoRoll({
@@ -28,6 +30,7 @@ export function PianoRoll({
   onClearStep,
   zoom = 1,
   compact = false,
+  scrollRef,
 }: PianoRollProps) {
   const stepSize = ticksPerStep(resolution);
   const totalSteps = resolution * measures;
@@ -93,14 +96,14 @@ export function PianoRoll({
   const cellH = Math.round(14 * zoom);
 
   return (
-    <div className="flex gap-0 select-none mt-1">
-      {/* Note labels */}
-      <div className="flex flex-col gap-px mr-1 shrink-0">
+    <div className="relative select-none mt-1">
+      {/* Note labels — absolute so they don't shift the grid */}
+      <div className="absolute flex flex-col gap-px" style={{ right: '100%', top: 0, paddingRight: 2 }}>
         {rows.map(note => (
           <div
             key={note}
             style={{ height: cellH }}
-            className="flex items-center justify-end pr-1 text-[9px] font-mono text-zinc-500 w-8"
+            className="flex items-center justify-end text-[9px] font-mono text-zinc-500 whitespace-nowrap"
           >
             {midiNoteToName(note)}
           </div>
@@ -108,7 +111,7 @@ export function PianoRoll({
       </div>
 
       {/* Grid */}
-      <div className="flex flex-col gap-px overflow-x-auto">
+      <div ref={scrollRef} className="flex flex-col gap-px overflow-hidden">
         {rows.map(note => (
           <div key={note} className="flex gap-px">
             {Array.from({ length: totalSteps }, (_, col) => {
@@ -130,7 +133,7 @@ export function PianoRoll({
                   onMouseEnter={() => handleMouseEnter(col, note)}
                   style={{ width: cellW, height: cellH }}
                   className={`
-                    rounded-sm cursor-pointer transition-colors
+                    shrink-0 rounded-sm cursor-pointer transition-colors
                     ${isCurrent ? 'ring-1 ring-purple-400' : ''}
                     ${isActive
                       ? 'bg-purple-500 hover:bg-purple-400'

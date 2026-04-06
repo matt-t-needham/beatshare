@@ -32,6 +32,7 @@ interface TrackSettingsProps {
   onSetStep?: (trackId: string, position: number, note: number, duration: number) => void;
   onClearStep?: (trackId: string, position: number) => void;
   zoom?: number;
+  scrollRef?: (el: HTMLDivElement | null) => void;
 }
 
 // --- Knob component (reused for octave and volume) ---
@@ -245,7 +246,7 @@ function SamplePicker({
 
 // --- Main component ---
 
-export function TrackSettings({ track, onUpdate, inline, installedPacks = [], songKey, songScale, resolution, measures, currentCol, onSetStep, onClearStep, zoom = 1 }: TrackSettingsProps) {
+export function TrackSettings({ track, onUpdate, inline, installedPacks = [], songKey, songScale, resolution, measures, currentCol, onSetStep, onClearStep, zoom = 1, scrollRef }: TrackSettingsProps) {
   const [preFiddleSteps, setPreFiddleSteps] = useState<typeof track.steps | null>(null);
 
   return (
@@ -392,8 +393,8 @@ export function TrackSettings({ track, onUpdate, inline, installedPacks = [], so
 
           {/* Piano roll below */}
           {songKey && songScale && resolution && measures != null && onSetStep && onClearStep && (
-            <div className="w-full">
-              <PianoRoll
+            <div className="w-full" style={{ marginLeft: 14, marginRight: -8 }}>
+              <PianoRoll scrollRef={scrollRef}
                 track={track}
                 songKey={songKey}
                 songScale={songScale}
@@ -506,10 +507,54 @@ export function TrackSettings({ track, onUpdate, inline, installedPacks = [], so
             )}
           </div>
 
+          {resolution && (
+            <div className="flex items-center">
+              <button
+                onClick={e => {
+                  e.stopPropagation();
+                  setPreFiddleSteps(track.steps);
+                  const stepSize = ticksPerStep(resolution);
+                  const newSteps = track.steps.map(step => {
+                    if (Math.random() < 0.5) return step;
+                    const shift = Math.random() < 0.5 ? -stepSize : stepSize;
+                    const newPos = step.position + shift;
+                    if (newPos < 0) return step;
+                    return { ...step, position: newPos };
+                  });
+                  onUpdate({ steps: newSteps });
+                }}
+                className="h-8 px-2 rounded-l bg-zinc-700 hover:bg-zinc-600 text-zinc-300 text-sm cursor-pointer border border-zinc-600 border-r-0 flex items-center"
+                title="Randomly shift ~50% of notes one cell left or right"
+              >
+                Fiddle
+              </button>
+              <button
+                onClick={e => {
+                  e.stopPropagation();
+                  if (!preFiddleSteps) return;
+                  onUpdate({ steps: preFiddleSteps });
+                  setPreFiddleSteps(null);
+                }}
+                disabled={!preFiddleSteps}
+                className={`h-8 px-1.5 rounded-r border border-zinc-600 flex items-center ${
+                  preFiddleSteps
+                    ? 'bg-zinc-700 hover:bg-zinc-600 text-zinc-300 cursor-pointer'
+                    : 'bg-zinc-700 text-zinc-600 cursor-default'
+                }`}
+                title="Undo the last fiddle"
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M3 10h10a5 5 0 015 5v0a5 5 0 01-5 5H9" />
+                  <polyline points="7 14 3 10 7 6" />
+                </svg>
+              </button>
+            </div>
+          )}
+
           {/* Compact piano roll for sample tracks */}
           {songKey && songScale && resolution && measures != null && onSetStep && onClearStep && (
-            <div className="w-full">
-              <PianoRoll
+            <div className="w-full" style={{ marginLeft: 14, marginRight: -8 }}>
+              <PianoRoll scrollRef={scrollRef}
                 track={track}
                 songKey={songKey}
                 songScale={songScale}
