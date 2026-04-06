@@ -160,7 +160,6 @@ export function StepGrid({
               <TrackRow
                 track={track}
                 index={idx}
-                trackCount={trackCount}
                 totalSteps={totalSteps}
                 stepSize={stepSize}
                 stepsPerBeat={stepsPerBeat}
@@ -249,7 +248,6 @@ export function StepGrid({
 interface TrackRowProps {
   track: Track;
   index: number;
-  trackCount: number;
   totalSteps: number;
   stepSize: number;
   stepsPerBeat: number;
@@ -275,8 +273,6 @@ interface TrackRowProps {
 
 function TrackRow({
   track,
-  index,
-  trackCount,
   totalSteps,
   stepSize,
   stepsPerBeat,
@@ -335,7 +331,7 @@ function TrackRow({
   const trackColor = useMemo(() => {
     if (track.type === 'sample' && track.sample?.sampleName) {
       const cat = classifySample(track.sample.sampleName);
-      return { color: cat.color, hover: cat.hoverColor };
+      return { color: cat.color, hoverColor: cat.hoverColor };
     }
     return SYNTH_COLOR;
   }, [track.type, track.sample?.sampleName]);
@@ -464,7 +460,7 @@ function TrackRow({
             : null;
 
           const activeColor = stepColor ? stepColor.color : trackColor.color;
-          const activeHover = stepColor ? stepColor.hoverColor : trackColor.hover;
+          const activeHover = stepColor ? stepColor.hoverColor : trackColor.hoverColor;
 
           const stepLabel = active
             ? (stepSampleName ? classifySample(stepSampleName).abbr : track.type === 'synth' ? midiNoteToName(active.note).replace(/\d+/, '') : '')
