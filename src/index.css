@@ -1,1 +1,16 @@
 @import "tailwindcss";
+
+/* Custom scrollbar for grid scroll */
+.grid-scrollbar::-webkit-scrollbar {
+  height: 6px;
+}
+.grid-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.grid-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.25);
+  border-radius: 3px;
+}
+.grid-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.4);
+}

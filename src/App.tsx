@@ -173,7 +173,7 @@ function App() {
     const oldMeasures = s.measures;
     const ticksPerMeasure = 64; // 4/4 time = 64 ticks per measure
     const totalOldTicks = oldMeasures * ticksPerMeasure;
-    const newMeasures = Math.min(oldMeasures * 2, 16);
+    const newMeasures = Math.min(oldMeasures * 2, 8);
     store.setSong({
       ...s,
       measures: newMeasures,
@@ -192,6 +192,12 @@ function App() {
     });
     showToast(`Doubled to ${newMeasures} bars`);
   }, [store]);
+
+  const handleClearAll = useCallback(() => {
+    if (playing) handleStop();
+    store.setSong({ ...songRef.current, tracks: [] });
+    setSoloTrackId(null);
+  }, [store, playing, handleStop]);
 
   const handleKeyChange = useCallback((newKey: MusicalKey, newScale: ScaleType) => {
     const s = songRef.current;
@@ -214,6 +220,7 @@ function App() {
         onOpenFile={handleOpenFile}
         onExportMidi={handleExportMidi}
         onDoubleUp={handleDoubleUp}
+        onClearAll={handleClearAll}
         resolution={resolution}
         onResolutionChange={store.setResolution}
         onKeyChange={handleKeyChange}

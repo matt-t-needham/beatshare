@@ -5,4 +5,7 @@ import tailwindcss from '@tailwindcss/vite'
 export default defineConfig({
   base: '/beatShare/',
   plugins: [react(), tailwindcss()],
+  build: {
+    chunkSizeWarningLimit: 800,
+  },
 })

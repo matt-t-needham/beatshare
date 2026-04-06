@@ -113,16 +113,6 @@ export function createDefaultSong(): Song {
     measures: 1,
     key: 'C' as MusicalKey,
     scale: 'major' as ScaleType,
-    tracks: [
-      {
-        id: crypto.randomUUID(),
-        name: 'Synth 1',
-        type: 'synth',
-        synth: { waveform: 'sawtooth', octave: 0 },
-        volume: 0.7,
-        muted: false,
-        steps: [],
-      },
-    ],
+    tracks: [],
   };
 }

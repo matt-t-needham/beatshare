@@ -21,6 +21,7 @@ interface HeaderProps {
   onOpenFile: (song: any) => void;
   onExportMidi: () => void;
   onDoubleUp: () => void;
+  onClearAll: () => void;
   resolution: GridResolution;
   onResolutionChange: (r: GridResolution) => void;
   onKeyChange: (key: MusicalKey, scale: ScaleType) => void;
@@ -30,11 +31,12 @@ interface HeaderProps {
 
 const ZOOM_LEVELS = [0.5, 0.75, 1, 1.25, 1.5];
 
-export function Header({ store, playing, onPlay, onStop, onShare, onSaveFile, onOpenFile, onExportMidi, onDoubleUp, resolution, onResolutionChange, onKeyChange, zoom, onZoomChange }: HeaderProps) {
+export function Header({ store, playing, onPlay, onStop, onShare, onSaveFile, onOpenFile, onExportMidi, onDoubleUp, onClearAll, resolution, onResolutionChange, onKeyChange, zoom, onZoomChange }: HeaderProps) {
   const { song, updateSong } = store;
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [editingName, setEditingName] = useState(false);
   const [nameInput, setNameInput] = useState(song.name);
+  const [confirmClear, setConfirmClear] = useState(false);
 
   // Local state for numeric inputs so typing isn't clamped mid-keystroke
   const [bpmInput, setBpmInput] = useState(String(song.bpm));
@@ -53,10 +55,13 @@ export function Header({ store, playing, onPlay, onStop, onShare, onSaveFile, on
     }
   };
 
-  const commitMeasures = () => {
-    const n = Number(measuresInput);
-    if (n >= 1 && n <= 16 && Number.isInteger(n)) {
+  const commitMeasures = (val?: string) => {
+    const n = Number(val ?? measuresInput);
+    if (n >= 1 && n <= 8 && Number.isInteger(n)) {
       updateSong({ measures: n });
+    } else if (n > 8) {
+      updateSong({ measures: 8 });
+      setMeasuresInput('8');
     } else {
       setMeasuresInput(String(song.measures));
     }
@@ -119,10 +124,16 @@ export function Header({ store, playing, onPlay, onStop, onShare, onSaveFile, on
         <input
           type="number"
           min={1}
-          max={16}
+          max={8}
           value={measuresInput}
-          onChange={e => setMeasuresInput(e.target.value)}
-          onBlur={commitMeasures}
+          onChange={e => {
+            setMeasuresInput(e.target.value);
+            const n = Number(e.target.value);
+            if (Number.isInteger(n) && n >= 1) {
+              commitMeasures(e.target.value);
+            }
+          }}
+          onBlur={() => commitMeasures()}
           onKeyDown={e => { if (e.key === 'Enter') commitMeasures(); }}
           className="bg-zinc-800 text-white w-14 px-2 py-1 rounded border border-zinc-600 text-sm text-center outline-none focus:border-purple-500"
         />
@@ -184,6 +195,25 @@ export function Header({ store, playing, onPlay, onStop, onShare, onSaveFile, on
       </div>
 
       <div className="flex-1" />
+
+      <button
+        onClick={() => {
+          if (confirmClear) {
+            onClearAll();
+            setConfirmClear(false);
+          } else {
+            setConfirmClear(true);
+            setTimeout(() => setConfirmClear(false), 3000);
+          }
+        }}
+        className={`px-3 py-1.5 text-sm rounded font-medium cursor-pointer ${
+          confirmClear
+            ? 'bg-red-600 hover:bg-red-500 text-white'
+            : 'bg-zinc-700 hover:bg-zinc-600 text-zinc-300'
+        }`}
+      >
+        {confirmClear ? 'Sure?' : 'Clear'}
+      </button>
 
       <button
         className="px-3 py-1.5 bg-purple-600 hover:bg-purple-500 text-white text-sm rounded font-medium cursor-pointer"
