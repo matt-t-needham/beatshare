@@ -43,10 +43,16 @@ function App() {
   async function checkMissingSamples(loadedSong: typeof song) {
     const needed = new Set<string>();
     for (const track of loadedSong.tracks) {
-      if (track.type !== 'sample' || track.sample?.packId !== SPIN_PACK_ID) continue;
-      if (track.sample.sampleName) needed.add(track.sample.sampleName);
-      for (const step of track.steps) {
-        if (step.sampleName) needed.add(step.sampleName);
+      if (track.type === 'sample' && track.sample?.packId === SPIN_PACK_ID) {
+        if (track.sample.sampleName) needed.add(track.sample.sampleName);
+        for (const step of track.steps) {
+          if (step.sampleName) needed.add(step.sampleName);
+        }
+      } else if (track.type === 'drum-machine' && track.drumMachine?.packId === SPIN_PACK_ID) {
+        for (const lane of track.drumMachine.lanes) needed.add(lane.sampleName);
+        for (const step of track.steps) {
+          if (step.sampleName) needed.add(step.sampleName);
+        }
       }
     }
     if (needed.size === 0) return;
@@ -238,6 +244,8 @@ function App() {
         onToggleStep={store.toggleStep}
         onSetStep={store.setStep}
         onClearStep={store.clearStep}
+        onSetDrumStep={store.setDrumStep}
+        onClearDrumStep={store.clearDrumStep}
         onMuteTrack={(id, muted) => store.updateTrack(id, { muted })}
         onSoloTrack={(id) => setSoloTrackId(prev => prev === id ? null : id)}
         onRemoveTrack={store.removeTrack}

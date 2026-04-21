@@ -218,15 +218,27 @@ async function loadSampleBuffer(packId: string, sampleName: string): Promise<Ton
 export async function preloadSamples(song: Song): Promise<void> {
   const promises: Promise<any>[] = [];
   for (const track of song.tracks) {
-    if (track.type !== 'sample' || !track.sample?.packId) continue;
-    // Collect all unique sample names from steps + the track-level brush
-    const names = new Set<string>();
-    if (track.sample.sampleName) names.add(track.sample.sampleName);
-    for (const step of track.steps) {
-      if (step.sampleName) names.add(step.sampleName);
-    }
-    for (const name of names) {
-      promises.push(loadSampleBuffer(track.sample.packId, name));
+    if (track.type === 'sample' && track.sample?.packId) {
+      // Collect all unique sample names from steps + the track-level brush
+      const names = new Set<string>();
+      if (track.sample.sampleName) names.add(track.sample.sampleName);
+      for (const step of track.steps) {
+        if (step.sampleName) names.add(step.sampleName);
+      }
+      for (const name of names) {
+        promises.push(loadSampleBuffer(track.sample.packId, name));
+      }
+    } else if (track.type === 'drum-machine' && track.drumMachine?.packId) {
+      const names = new Set<string>();
+      for (const lane of track.drumMachine.lanes) {
+        names.add(lane.sampleName);
+      }
+      for (const step of track.steps) {
+        if (step.sampleName) names.add(step.sampleName);
+      }
+      for (const name of names) {
+        promises.push(loadSampleBuffer(track.drumMachine.packId, name));
+      }
     }
   }
   await Promise.all(promises);
@@ -313,6 +325,35 @@ function scheduleAllEvents(song: Song) {
             const maxDur = buffer.duration / playbackRate;
             const dur = 0.02 + (sampleDecay / 100) * (maxDur - 0.02);
             source.stop(time + dur);
+          }
+        }, startTime);
+        scheduledEvents.push(eventId);
+      }
+    } else if (track.type === 'drum-machine' && track.drumMachine?.packId) {
+      const packId = track.drumMachine.packId;
+      const gain = getTrackOutput(track.id, track.volume, track.muted, track.effect);
+      // Build a per-lane volume lookup and mute set
+      const laneVolumes = new Map<string, number>();
+      const laneMuted = new Set<string>();
+      for (const lane of track.drumMachine.lanes) {
+        laneVolumes.set(lane.sampleName, lane.volume);
+        if (lane.muted) laneMuted.add(lane.sampleName);
+      }
+      for (const step of track.steps) {
+        if (step.position >= totalTicks) continue;
+        const stepSample = step.sampleName;
+        if (!stepSample) continue;
+        if (laneMuted.has(stepSample)) continue;
+        const buffer = sampleBufferCache.get(sampleKey(packId, stepSample));
+        if (!buffer) continue;
+        const startTime = ticksToSeconds(step.position, bpm);
+        const laneVol = laneVolumes.get(stepSample) ?? 1;
+        const eventId = Tone.getTransport().schedule((time) => {
+          const source = new Tone.ToneBufferSource(buffer).connect(gain);
+          source.playbackRate.value = 1;
+          source.start(time);
+          if (laneVol < 1) {
+            source.volume.value = Tone.gainToDb(laneVol);
           }
         }, startTime);
         scheduledEvents.push(eventId);

@@ -3,6 +3,7 @@ import type { Song, Track, GridResolution, InstalledPack } from '../types';
 import { ticksPerStep, midiNoteToName } from '../types';
 import { TrackSettings } from './TrackSettings';
 import { classifySample, friendlyName, SYNTH_COLOR } from '../sample-categories';
+import { Tooltip } from './Tooltip';
 
 interface StepGridProps {
   song: Song;
@@ -14,6 +15,8 @@ interface StepGridProps {
   onToggleStep?: (trackId: string, position: number, note: number, duration: number) => void;
   onSetStep: (trackId: string, position: number, note: number, duration: number, sampleName?: string) => void;
   onClearStep: (trackId: string, position: number) => void;
+  onSetDrumStep: (trackId: string, position: number, sampleName: string, duration: number) => void;
+  onClearDrumStep: (trackId: string, position: number, sampleName: string) => void;
   onMuteTrack: (trackId: string, muted: boolean) => void;
   onSoloTrack: (trackId: string) => void;
   onRemoveTrack: (trackId: string) => void;
@@ -34,6 +37,8 @@ export function StepGrid({
   onSelectTrack,
   onSetStep,
   onClearStep,
+  onSetDrumStep,
+  onClearDrumStep,
   onMuteTrack,
   onSoloTrack,
   onRemoveTrack,
@@ -178,7 +183,7 @@ export function StepGrid({
                 onMoveUp={idx > 0 ? () => onMoveTrack(idx, idx - 1) : undefined}
                 onMoveDown={idx < trackCount - 1 ? () => onMoveTrack(idx, idx + 1) : undefined}
                 stepRowRef={el => { stepRowRefs.current[idx] = el; }}
-                onStepMouseDown={(col, isActive) => {
+                onStepMouseDown={track.type === 'drum-machine' ? undefined : (col, isActive) => {
                   const position = col * stepSize;
                   const defaultNote = track.synth ? ((track.synth.octave + 4) * 12 + 24) : 60;
                   const brushSample = track.type === 'sample' ? track.sample?.sampleName : undefined;
@@ -190,7 +195,7 @@ export function StepGrid({
                     onSetStep(track.id, position, defaultNote, stepSize, brushSample);
                   }
                 }}
-                onStepMouseEnter={(col) => {
+                onStepMouseEnter={track.type === 'drum-machine' ? undefined : (col) => {
                   const drag = dragRef.current;
                   if (!drag || drag.trackId !== track.id) return;
                   const position = col * stepSize;
@@ -216,6 +221,8 @@ export function StepGrid({
                     currentCol={currentCol}
                     onSetStep={(trackId, position, note, duration) => onSetStep(trackId, position, note, duration)}
                     onClearStep={onClearStep}
+                    onSetDrumStep={onSetDrumStep}
+                    onClearDrumStep={onClearDrumStep}
                     zoom={zoom}
                     scrollRef={el => { pianoRollRefs.current[idx] = el; }}
                   />
@@ -265,8 +272,8 @@ interface TrackRowProps {
   onClone: () => void;
   onMoveUp?: () => void;
   onMoveDown?: () => void;
-  onStepMouseDown: (col: number, isActive: boolean) => void;
-  onStepMouseEnter: (col: number) => void;
+  onStepMouseDown?: (col: number, isActive: boolean) => void;
+  onStepMouseEnter?: (col: number) => void;
   onRename: (name: string) => void;
   stepRowRef?: (el: HTMLDivElement | null) => void;
 }
@@ -322,7 +329,10 @@ function TrackRow({
     const map = new Map<number, { note: number; sampleName?: string }>();
     for (const step of track.steps) {
       const col = Math.floor(step.position / stepSize);
-      map.set(col, { note: step.note, sampleName: step.sampleName });
+      // For drum machines, keep the first active step per column (merged view)
+      if (!map.has(col)) {
+        map.set(col, { note: step.note, sampleName: step.sampleName });
+      }
     }
     return map;
   }, [track.steps, stepSize]);
@@ -332,6 +342,9 @@ function TrackRow({
     if (track.type === 'sample' && track.sample?.sampleName) {
       const cat = classifySample(track.sample.sampleName);
       return { color: cat.color, hoverColor: cat.hoverColor };
+    }
+    if (track.type === 'drum-machine') {
+      return { color: '#8855cc', hoverColor: '#9966dd' }; // violet for drum machine
     }
     return SYNTH_COLOR;
   }, [track.type, track.sample?.sampleName]);
@@ -345,67 +358,72 @@ function TrackRow({
     >
       {/* Top row: icons + label */}
       <div className="flex items-center gap-1 mb-1">
-        <button
-          onClick={e => { e.stopPropagation(); onToggleExpanded(); }}
-          className="w-7 h-7 rounded bg-zinc-700 text-zinc-400 hover:bg-zinc-600 hover:text-white cursor-pointer flex items-center justify-center border border-zinc-600"
-          title={expanded ? 'Collapse settings' : 'Expand settings'}
-        >
-          <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-            <path
-              d={expanded ? 'M2 7.5L6 3.5L10 7.5' : 'M2 4.5L6 8.5L10 4.5'}
-              stroke="currentColor"
-              strokeWidth="1.5"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </svg>
-        </button>
-        <button
-          onClick={e => { e.stopPropagation(); onMute(); }}
-          className={`w-7 h-7 rounded cursor-pointer flex items-center justify-center border ${
-            track.muted ? 'bg-yellow-600 text-white border-yellow-500' : 'bg-zinc-700 text-zinc-400 hover:bg-zinc-600 border-zinc-600'
-          }`}
-          title={track.muted ? 'Unmute' : 'Mute'}
-        >
-          {track.muted ? (
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M11 5L6 9H2v6h4l5 4V5z" />
-              <line x1="23" y1="9" x2="17" y2="15" />
-              <line x1="17" y1="9" x2="23" y2="15" />
+        <Tooltip text={expanded ? 'Collapse settings' : 'Expand settings'}>
+          <button
+            onClick={e => { e.stopPropagation(); onToggleExpanded(); }}
+            className="w-7 h-7 rounded bg-zinc-700 text-zinc-400 hover:bg-zinc-600 hover:text-white cursor-pointer flex items-center justify-center border border-zinc-600"
+          >
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+              <path
+                d={expanded ? 'M2 7.5L6 3.5L10 7.5' : 'M2 4.5L6 8.5L10 4.5'}
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
             </svg>
-          ) : (
+          </button>
+        </Tooltip>
+        <Tooltip text={track.muted ? 'Unmute' : 'Mute'}>
+          <button
+            onClick={e => { e.stopPropagation(); onMute(); }}
+            className={`w-7 h-7 rounded cursor-pointer flex items-center justify-center border ${
+              track.muted ? 'bg-yellow-600 text-white border-yellow-500' : 'bg-zinc-700 text-zinc-400 hover:bg-zinc-600 border-zinc-600'
+            }`}
+          >
+            {track.muted ? (
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M11 5L6 9H2v6h4l5 4V5z" />
+                <line x1="23" y1="9" x2="17" y2="15" />
+                <line x1="17" y1="9" x2="23" y2="15" />
+              </svg>
+            ) : (
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M11 5L6 9H2v6h4l5 4V5z" />
+                <path d="M19.07 4.93a10 10 0 010 14.14M15.54 8.46a5 5 0 010 7.07" />
+              </svg>
+            )}
+          </button>
+        </Tooltip>
+        <Tooltip text={soloed ? 'Un-solo' : 'Solo (play only this track)'}>
+          <button
+            onClick={e => { e.stopPropagation(); onSolo(); }}
+            className={`w-7 h-7 rounded cursor-pointer flex items-center justify-center text-xs font-bold border ${
+              soloed ? 'bg-blue-600 text-white border-blue-500' : 'bg-zinc-700 text-zinc-400 hover:bg-zinc-600 border-zinc-600'
+            }`}
+          >
+            S
+          </button>
+        </Tooltip>
+        <Tooltip text="Clone track">
+          <button
+            onClick={e => { e.stopPropagation(); onClone(); }}
+            className="w-7 h-7 rounded bg-zinc-700 text-zinc-400 hover:bg-purple-600 hover:text-white cursor-pointer flex items-center justify-center border border-zinc-600"
+          >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M11 5L6 9H2v6h4l5 4V5z" />
-              <path d="M19.07 4.93a10 10 0 010 14.14M15.54 8.46a5 5 0 010 7.07" />
+              <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+              <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" />
             </svg>
-          )}
-        </button>
-        <button
-          onClick={e => { e.stopPropagation(); onSolo(); }}
-          className={`w-7 h-7 rounded cursor-pointer flex items-center justify-center text-xs font-bold border ${
-            soloed ? 'bg-blue-600 text-white border-blue-500' : 'bg-zinc-700 text-zinc-400 hover:bg-zinc-600 border-zinc-600'
-          }`}
-          title={soloed ? 'Un-solo' : 'Solo (play only this track)'}
-        >
-          S
-        </button>
-        <button
-          onClick={e => { e.stopPropagation(); onClone(); }}
-          className="w-7 h-7 rounded bg-zinc-700 text-zinc-400 hover:bg-purple-600 hover:text-white cursor-pointer flex items-center justify-center border border-zinc-600"
-          title="Clone track"
-        >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
-            <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" />
-          </svg>
-        </button>
-        <button
-          onClick={e => { e.stopPropagation(); onRemove(); }}
-          className="w-7 h-7 rounded bg-zinc-700 text-zinc-400 hover:bg-red-700 hover:text-white cursor-pointer flex items-center justify-center text-sm border border-zinc-600"
-          title="Remove track"
-        >
-          ×
-        </button>
+          </button>
+        </Tooltip>
+        <Tooltip text="Remove track">
+          <button
+            onClick={e => { e.stopPropagation(); onRemove(); }}
+            className="w-7 h-7 rounded bg-zinc-700 text-zinc-400 hover:bg-red-700 hover:text-white cursor-pointer flex items-center justify-center text-sm border border-zinc-600"
+          >
+            ×
+          </button>
+        </Tooltip>
         {editing ? (
           <input
             ref={inputRef}
@@ -417,32 +435,35 @@ function TrackRow({
             onClick={e => e.stopPropagation()}
           />
         ) : (
-          <span
-            className="text-xs text-zinc-300 truncate cursor-default hover:text-white ml-1"
-            onDoubleClick={(e) => { e.stopPropagation(); startEditing(); }}
-            title="Double-click to rename"
-          >
-            {track.name}
-          </span>
+          <Tooltip text="Double-click to rename">
+            <span
+              className="text-xs text-zinc-300 truncate cursor-default hover:text-white ml-1"
+              onDoubleClick={(e) => { e.stopPropagation(); startEditing(); }}
+            >
+              {track.name}
+            </span>
+          </Tooltip>
         )}
         <div className="flex-1" />
         {/* Up/down reorder buttons */}
-        <button
-          onClick={e => { e.stopPropagation(); onMoveUp?.(); }}
-          disabled={!onMoveUp}
-          className="w-6 h-6 rounded bg-zinc-700 hover:bg-zinc-600 disabled:opacity-30 disabled:cursor-default cursor-pointer flex items-center justify-center border border-zinc-600 text-zinc-400 hover:text-zinc-200 shrink-0"
-          title="Move up"
-        >
-          <svg width="10" height="6" viewBox="0 0 10 6" fill="none"><path d="M1 5L5 1L9 5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
-        </button>
-        <button
-          onClick={e => { e.stopPropagation(); onMoveDown?.(); }}
-          disabled={!onMoveDown}
-          className="w-6 h-6 rounded bg-zinc-700 hover:bg-zinc-600 disabled:opacity-30 disabled:cursor-default cursor-pointer flex items-center justify-center border border-zinc-600 text-zinc-400 hover:text-zinc-200 shrink-0"
-          title="Move down"
-        >
-          <svg width="10" height="6" viewBox="0 0 10 6" fill="none"><path d="M1 1L5 5L9 1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
-        </button>
+        <Tooltip text="Move up">
+          <button
+            onClick={e => { e.stopPropagation(); onMoveUp?.(); }}
+            disabled={!onMoveUp}
+            className="w-6 h-6 rounded bg-zinc-700 hover:bg-zinc-600 disabled:opacity-30 disabled:cursor-default cursor-pointer flex items-center justify-center border border-zinc-600 text-zinc-400 hover:text-zinc-200 shrink-0"
+          >
+            <svg width="10" height="6" viewBox="0 0 10 6" fill="none"><path d="M1 5L5 1L9 5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+          </button>
+        </Tooltip>
+        <Tooltip text="Move down">
+          <button
+            onClick={e => { e.stopPropagation(); onMoveDown?.(); }}
+            disabled={!onMoveDown}
+            className="w-6 h-6 rounded bg-zinc-700 hover:bg-zinc-600 disabled:opacity-30 disabled:cursor-default cursor-pointer flex items-center justify-center border border-zinc-600 text-zinc-400 hover:text-zinc-200 shrink-0"
+          >
+            <svg width="10" height="6" viewBox="0 0 10 6" fill="none"><path d="M1 1L5 5L9 1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+          </button>
+        </Tooltip>
       </div>
 
       {/* Step cells */}
@@ -463,7 +484,7 @@ function TrackRow({
           const activeHover = stepColor ? stepColor.hoverColor : trackColor.hoverColor;
 
           const stepLabel = active
-            ? (stepSampleName ? classifySample(stepSampleName).abbr : track.type === 'synth' ? midiNoteToName(active.note).replace(/\d+/, '') : '')
+            ? (stepSampleName ? classifySample(stepSampleName).abbr : track.type === 'synth' ? midiNoteToName(active.note).replace(/\d+/, '') : track.type === 'drum-machine' ? '' : '')
             : '';
 
           return (
@@ -473,12 +494,12 @@ function TrackRow({
                 <div className="absolute left-0 top-0 bottom-0 w-px" style={{ backgroundColor: 'rgba(255,255,255,0.18)', marginLeft: -1 }} />
               )}
               <button
-                onMouseDown={e => {
+                onMouseDown={onStepMouseDown ? (e => {
                   e.preventDefault();
                   e.stopPropagation();
                   onStepMouseDown(col, !!active);
-                }}
-                onMouseEnter={() => onStepMouseEnter(col)}
+                }) : undefined}
+                onMouseEnter={onStepMouseEnter ? (() => onStepMouseEnter(col)) : undefined}
                 style={{
                   width: cellSize,
                   height: cellSize,

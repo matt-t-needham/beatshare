@@ -31,12 +31,24 @@ export interface EffectConfig {
   wet?: number;      // 0-1, default varies by effect
 }
 
+export interface DrumLane {
+  sampleName: string;  // e.g. "BD0000.WAV"
+  volume: number;      // 0-1, per-lane volume
+  muted: boolean;
+}
+
+export interface DrumMachineConfig {
+  packId: string;
+  lanes: DrumLane[];
+}
+
 export interface Track {
   id: string;
   name: string;
-  type: 'synth' | 'sample';
+  type: 'synth' | 'sample' | 'drum-machine';
   synth?: SynthConfig;
   sample?: SampleConfig;
+  drumMachine?: DrumMachineConfig;
   volume: number;     // 0-1
   muted: boolean;
   effect?: EffectConfig;

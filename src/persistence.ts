@@ -13,9 +13,15 @@ interface SerializedSong {
   t: SerializedTrack[];
 }
 
+interface SerializedDrumLane {
+  sn: string;      // sampleName
+  v: number;       // volume
+  mu: boolean;     // muted
+}
+
 interface SerializedTrack {
   n: string;       // name
-  ty: 'synth' | 'sample';
+  ty: 'synth' | 'sample' | 'drum-machine';
   w?: string;      // waveform (synth)
   o?: number;      // octave (synth)
   dc?: number;     // decay (synth)
@@ -23,6 +29,7 @@ interface SerializedTrack {
   sn?: string;     // sampleName (sample)
   ps?: number;     // pitchShift (sample)
   sd?: number;     // sample decay
+  dm?: { pk: string; ln: SerializedDrumLane[] }; // drumMachine
   v: number;       // volume
   mu: boolean;     // muted
   fx?: string;     // effect id
@@ -52,6 +59,7 @@ export function serialize(song: Song): SerializedSong {
       ty: t.type,
       ...(t.synth ? { w: t.synth.waveform, o: t.synth.octave, ...(t.synth.decay != null && t.synth.decay !== 50 ? { dc: t.synth.decay } : {}) } : {}),
       ...(t.sample ? { pk: t.sample.packId, sn: t.sample.sampleName, ...(t.sample.pitchShift ? { ps: t.sample.pitchShift } : {}), ...(t.sample.decay != null && t.sample.decay !== 100 ? { sd: t.sample.decay } : {}) } : {}),
+      ...(t.drumMachine ? { dm: { pk: t.drumMachine.packId, ln: t.drumMachine.lanes.map(l => ({ sn: l.sampleName, v: l.volume, mu: l.muted })) } } : {}),
       v: t.volume,
       mu: t.muted,
       ...(t.effect ? { fx: t.effect.id, ...(t.effect.wet != null && t.effect.wet !== 0.5 ? { fw: t.effect.wet } : {}) } : {}),
@@ -75,6 +83,7 @@ export function deserialize(data: SerializedSong): Song {
       type: t.ty || 'synth',
       ...(t.ty === 'synth' ? { synth: { waveform: (t.w as any) || 'sawtooth', octave: t.o ?? 0, ...(t.dc != null ? { decay: t.dc } : {}) } } : {}),
       ...(t.ty === 'sample' ? { sample: { packId: t.pk || '', sampleName: t.sn || '', ...(t.ps ? { pitchShift: t.ps } : {}), ...(t.sd != null ? { decay: t.sd } : {}) } } : {}),
+      ...(t.dm ? { drumMachine: { packId: t.dm.pk, lanes: t.dm.ln.map(l => ({ sampleName: l.sn, volume: l.v, muted: l.mu })) } } : {}),
       volume: t.v ?? 0.7,
       muted: t.mu || false,
       ...(t.fx ? { effect: { id: t.fx, ...(t.fw != null ? { wet: t.fw } : {}) } } : {}),

@@ -87,6 +87,29 @@ export function useSongStore() {
     });
   }, []);
 
+  const setDrumStep = useCallback((trackId: string, position: number, sampleName: string, duration: number) => {
+    setSong(prev => ({
+      ...prev,
+      tracks: prev.tracks.map(t => {
+        if (t.id !== trackId) return t;
+        const existing = t.steps.find(s => s.position === position && s.sampleName === sampleName);
+        if (existing) return t;
+        const newStep: Step = { position, note: 60, velocity: 100, duration, sampleName };
+        return { ...t, steps: [...t.steps, newStep] };
+      }),
+    }));
+  }, []);
+
+  const clearDrumStep = useCallback((trackId: string, position: number, sampleName: string) => {
+    setSong(prev => ({
+      ...prev,
+      tracks: prev.tracks.map(t => {
+        if (t.id !== trackId) return t;
+        return { ...t, steps: t.steps.filter(s => !(s.position === position && s.sampleName === sampleName)) };
+      }),
+    }));
+  }, []);
+
   const updateStepNote = useCallback((trackId: string, position: number, note: number) => {
     setSong(prev => ({
       ...prev,
@@ -113,6 +136,8 @@ export function useSongStore() {
     toggleStep,
     setStep,
     clearStep,
+    setDrumStep,
+    clearDrumStep,
     updateStepNote,
     moveTrack,
     setResolution,

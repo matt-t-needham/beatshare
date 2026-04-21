@@ -3,6 +3,7 @@ import type { SongStore } from '../store';
 import type { GridResolution, MusicalKey, ScaleType } from '../types';
 import { ALL_KEYS, ALL_SCALES } from '../scales';
 import { importFromFile } from '../persistence';
+import { Tooltip } from './Tooltip';
 
 const RESOLUTIONS: { value: GridResolution; label: string }[] = [
   { value: 8, label: '8th' },
@@ -85,25 +86,28 @@ export function Header({ store, playing, onPlay, onStop, onShare, onSaveFile, on
           autoFocus
         />
       ) : (
-        <button
-          className="text-lg font-semibold text-white hover:text-purple-400 cursor-pointer"
-          onClick={() => { setNameInput(song.name); setEditingName(true); }}
-          title="Click to rename"
-        >
-          {song.name}
-        </button>
+        <Tooltip text="Click to rename">
+          <button
+            className="text-lg font-semibold text-white hover:text-purple-400 cursor-pointer"
+            onClick={() => { setNameInput(song.name); setEditingName(true); }}
+          >
+            {song.name}
+          </button>
+        </Tooltip>
       )}
 
-      <button
-        onClick={playing ? onStop : onPlay}
-        className={`px-4 py-1.5 rounded font-medium text-sm cursor-pointer ${
-          playing
-            ? 'bg-red-600 hover:bg-red-500 text-white'
-            : 'bg-green-600 hover:bg-green-500 text-white'
-        }`}
-      >
-        {playing ? 'Stop' : 'Play'}
-      </button>
+      <Tooltip text={playing ? 'Stop playback' : 'Start playback (Space)'}>
+        <button
+          onClick={playing ? onStop : onPlay}
+          className={`px-4 py-1.5 rounded font-medium text-sm cursor-pointer ${
+            playing
+              ? 'bg-red-600 hover:bg-red-500 text-white'
+              : 'bg-green-600 hover:bg-green-500 text-white'
+          }`}
+        >
+          {playing ? 'Stop' : 'Play'}
+        </button>
+      </Tooltip>
 
       <div className="flex items-center gap-2 ml-4">
         <label className="text-zinc-400 text-sm">BPM</label>
@@ -137,13 +141,14 @@ export function Header({ store, playing, onPlay, onStop, onShare, onSaveFile, on
           onKeyDown={e => { if (e.key === 'Enter') commitMeasures(); }}
           className="bg-zinc-800 text-white w-14 px-2 py-1 rounded border border-zinc-600 text-sm text-center outline-none focus:border-purple-500"
         />
-        <button
-          onClick={onDoubleUp}
-          className="px-3 py-1.5 bg-zinc-700 hover:bg-zinc-600 text-zinc-300 text-sm rounded cursor-pointer"
-          title="Double the bars and copy all existing content into the new bars"
-        >
-          Double up!
-        </button>
+        <Tooltip text="Double the bars and copy all content into the new bars">
+          <button
+            onClick={onDoubleUp}
+            className="px-3 py-1.5 bg-zinc-700 hover:bg-zinc-600 text-zinc-300 text-sm rounded cursor-pointer"
+          >
+            Double up!
+          </button>
+        </Tooltip>
       </div>
 
       <div className="flex items-center gap-2">
@@ -196,43 +201,51 @@ export function Header({ store, playing, onPlay, onStop, onShare, onSaveFile, on
 
       <div className="flex-1" />
 
-      <button
-        onClick={() => {
-          if (confirmClear) {
-            onClearAll();
-            setConfirmClear(false);
-          } else {
-            setConfirmClear(true);
-            setTimeout(() => setConfirmClear(false), 3000);
-          }
-        }}
-        className={`px-3 py-1.5 text-sm rounded font-medium cursor-pointer ${
-          confirmClear
-            ? 'bg-red-600 hover:bg-red-500 text-white'
-            : 'bg-zinc-700 hover:bg-zinc-600 text-zinc-300'
-        }`}
-      >
-        {confirmClear ? 'Sure?' : 'Clear'}
-      </button>
+      <Tooltip text="Remove all tracks">
+        <button
+          onClick={() => {
+            if (confirmClear) {
+              onClearAll();
+              setConfirmClear(false);
+            } else {
+              setConfirmClear(true);
+              setTimeout(() => setConfirmClear(false), 3000);
+            }
+          }}
+          className={`px-3 py-1.5 text-sm rounded font-medium cursor-pointer ${
+            confirmClear
+              ? 'bg-red-600 hover:bg-red-500 text-white'
+              : 'bg-zinc-700 hover:bg-zinc-600 text-zinc-300'
+          }`}
+        >
+          {confirmClear ? 'Sure?' : 'Clear'}
+        </button>
+      </Tooltip>
 
-      <button
-        className="px-3 py-1.5 bg-zinc-700 hover:bg-zinc-600 text-white text-sm rounded font-medium cursor-pointer"
-        onClick={onShare}
-      >
-        Share
-      </button>
-      <button
-        className="px-3 py-1.5 bg-zinc-700 hover:bg-zinc-600 text-white text-sm rounded font-medium cursor-pointer"
-        onClick={onSaveFile}
-      >
-        Save
-      </button>
-      <button
-        className="px-3 py-1.5 bg-zinc-700 hover:bg-zinc-600 text-white text-sm rounded font-medium cursor-pointer"
-        onClick={() => fileInputRef.current?.click()}
-      >
-        Open
-      </button>
+      <Tooltip text="Copy a shareable link to clipboard">
+        <button
+          className="px-3 py-1.5 bg-zinc-700 hover:bg-zinc-600 text-white text-sm rounded font-medium cursor-pointer"
+          onClick={onShare}
+        >
+          Share
+        </button>
+      </Tooltip>
+      <Tooltip text="Save song as a .beatshare file">
+        <button
+          className="px-3 py-1.5 bg-zinc-700 hover:bg-zinc-600 text-white text-sm rounded font-medium cursor-pointer"
+          onClick={onSaveFile}
+        >
+          Save
+        </button>
+      </Tooltip>
+      <Tooltip text="Open a .beatshare file">
+        <button
+          className="px-3 py-1.5 bg-zinc-700 hover:bg-zinc-600 text-white text-sm rounded font-medium cursor-pointer"
+          onClick={() => fileInputRef.current?.click()}
+        >
+          Open
+        </button>
+      </Tooltip>
       <input
         ref={fileInputRef}
         type="file"
@@ -251,12 +264,14 @@ export function Header({ store, playing, onPlay, onStop, onShare, onSaveFile, on
           e.target.value = '';
         }}
       />
-      <button
-        className="px-3 py-1.5 bg-zinc-700 hover:bg-zinc-600 text-white text-sm rounded font-medium cursor-pointer"
-        onClick={onExportMidi}
-      >
-        Export MIDI
-      </button>
+      <Tooltip text="Download song as a MIDI file">
+        <button
+          className="px-3 py-1.5 bg-zinc-700 hover:bg-zinc-600 text-white text-sm rounded font-medium cursor-pointer"
+          onClick={onExportMidi}
+        >
+          Export MIDI
+        </button>
+      </Tooltip>
     </div>
   );
 }
