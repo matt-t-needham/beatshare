@@ -349,12 +349,11 @@ function scheduleAllEvents(song: Song) {
         const startTime = ticksToSeconds(step.position, bpm);
         const laneVol = laneVolumes.get(stepSample) ?? 1;
         const eventId = Tone.getTransport().schedule((time) => {
-          const source = new Tone.ToneBufferSource(buffer).connect(gain);
+          const laneGain = new Tone.Gain(Tone.gainToDb(laneVol));
+          const source = new Tone.ToneBufferSource(buffer).connect(laneGain);
+          laneGain.connect(gain);
           source.playbackRate.value = 1;
           source.start(time);
-          if (laneVol < 1) {
-            source.volume.value = Tone.gainToDb(laneVol);
-          }
         }, startTime);
         scheduledEvents.push(eventId);
       }
