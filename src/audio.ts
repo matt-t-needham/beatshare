@@ -210,7 +210,8 @@ async function loadSampleBuffer(packId: string, sampleName: string): Promise<Ton
     const toneBuffer = new Tone.ToneAudioBuffer(audioBuffer);
     sampleBufferCache.set(key, toneBuffer);
     return toneBuffer;
-  } catch {
+  } catch (error) {
+    console.error(`Failed to load sample ${packId}/${sampleName}:`, error);
     return null;
   }
 }
@@ -349,7 +350,7 @@ function scheduleAllEvents(song: Song) {
         const startTime = ticksToSeconds(step.position, bpm);
         const laneVol = laneVolumes.get(stepSample) ?? 1;
         const eventId = Tone.getTransport().schedule((time) => {
-          const laneGain = new Tone.Gain(Tone.gainToDb(laneVol));
+          const laneGain = new Tone.Gain(laneVol);
           const source = new Tone.ToneBufferSource(buffer).connect(laneGain);
           laneGain.connect(gain);
           source.playbackRate.value = 1;

@@ -252,7 +252,7 @@ function SamplePicker({
 // --- Main component ---
 
 export function TrackSettings({ track, onUpdate, inline, installedPacks = [], songKey, songScale, resolution, measures, currentCol, onSetStep, onClearStep, onSetDrumStep, onClearDrumStep, zoom = 1, scrollRef }: TrackSettingsProps) {
-  const [preFiddleSteps, setPreFiddleSteps] = useState<typeof track.steps | null>(null);
+  const [preHumanizeSteps, setPreHumanizeSteps] = useState<typeof track.steps | null>(null);
 
   return (
     <div
@@ -356,7 +356,7 @@ export function TrackSettings({ track, onUpdate, inline, installedPacks = [], so
                 <button
                   onClick={e => {
                     e.stopPropagation();
-                    setPreFiddleSteps(track.steps);
+                    setPreHumanizeSteps(track.steps);
                     const stepSize = ticksPerStep(resolution);
                     const newSteps = track.steps.map(step => {
                       if (Math.random() < 0.5) return step;
@@ -375,13 +375,13 @@ export function TrackSettings({ track, onUpdate, inline, installedPacks = [], so
                 <button
                   onClick={e => {
                     e.stopPropagation();
-                    if (!preFiddleSteps) return;
-                    onUpdate({ steps: preFiddleSteps });
-                    setPreFiddleSteps(null);
+                    if (!preHumanizeSteps) return;
+                    onUpdate({ steps: preHumanizeSteps });
+                    setPreHumanizeSteps(null);
                   }}
-                  disabled={!preFiddleSteps}
+                  disabled={!preHumanizeSteps}
                   className={`h-8 px-1.5 rounded-r border border-zinc-600 flex items-center ${
-                    preFiddleSteps
+                    preHumanizeSteps
                       ? 'bg-zinc-700 hover:bg-zinc-600 text-zinc-300 cursor-pointer'
                       : 'bg-zinc-700 text-zinc-600 cursor-default'
                   }`}
@@ -517,7 +517,7 @@ export function TrackSettings({ track, onUpdate, inline, installedPacks = [], so
               <button
                 onClick={e => {
                   e.stopPropagation();
-                  setPreFiddleSteps(track.steps);
+                  setPreHumanizeSteps(track.steps);
                   const stepSize = ticksPerStep(resolution);
                   const newSteps = track.steps.map(step => {
                     if (Math.random() < 0.5) return step;
@@ -531,22 +531,22 @@ export function TrackSettings({ track, onUpdate, inline, installedPacks = [], so
                 className="h-8 px-2 rounded-l bg-zinc-700 hover:bg-zinc-600 text-zinc-300 text-sm cursor-pointer border border-zinc-600 border-r-0 flex items-center"
                 title="Randomly shift ~50% of notes one cell left or right"
               >
-                Fiddle
+                Humanize
               </button>
               <button
                 onClick={e => {
                   e.stopPropagation();
-                  if (!preFiddleSteps) return;
-                  onUpdate({ steps: preFiddleSteps });
-                  setPreFiddleSteps(null);
+                  if (!preHumanizeSteps) return;
+                  onUpdate({ steps: preHumanizeSteps });
+                  setPreHumanizeSteps(null);
                 }}
-                disabled={!preFiddleSteps}
+                disabled={!preHumanizeSteps}
                 className={`h-8 px-1.5 rounded-r border border-zinc-600 flex items-center ${
-                  preFiddleSteps
+                  preHumanizeSteps
                     ? 'bg-zinc-700 hover:bg-zinc-600 text-zinc-300 cursor-pointer'
                     : 'bg-zinc-700 text-zinc-600 cursor-default'
                 }`}
-                title="Undo the last fiddle"
+                title="Undo the last humanize"
               >
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M3 10h10a5 5 0 015 5v0a5 5 0 01-5 5H9" />
@@ -626,7 +626,7 @@ export function TrackSettings({ track, onUpdate, inline, installedPacks = [], so
                 <button
                   onClick={e => {
                     e.stopPropagation();
-                    setPreFiddleSteps(track.steps);
+                    setPreHumanizeSteps(track.steps);
                     const stepSize = ticksPerStep(resolution);
                     const newSteps = track.steps.map(step => {
                       if (Math.random() < 0.5) return step;
@@ -645,13 +645,13 @@ export function TrackSettings({ track, onUpdate, inline, installedPacks = [], so
                 <button
                   onClick={e => {
                     e.stopPropagation();
-                    if (!preFiddleSteps) return;
-                    onUpdate({ steps: preFiddleSteps });
-                    setPreFiddleSteps(null);
+                    if (!preHumanizeSteps) return;
+                    onUpdate({ steps: preHumanizeSteps });
+                    setPreHumanizeSteps(null);
                   }}
-                  disabled={!preFiddleSteps}
+                  disabled={!preHumanizeSteps}
                   className={`h-8 px-1.5 rounded-r border border-zinc-600 flex items-center ${
-                    preFiddleSteps
+                    preHumanizeSteps
                       ? 'bg-zinc-700 hover:bg-zinc-600 text-zinc-300 cursor-pointer'
                       : 'bg-zinc-700 text-zinc-600 cursor-default'
                   }`}

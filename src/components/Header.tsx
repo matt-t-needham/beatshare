@@ -96,7 +96,7 @@ export function Header({ store, playing, onPlay, onStop, onShare, onSaveFile, on
         </Tooltip>
       )}
 
-      <Tooltip text={playing ? 'Stop playback' : 'Start playback (Space)'}>
+      <Tooltip position="bottom" text={playing ? 'Stop playback' : 'Start playback (Space)'}>
         <button
           onClick={playing ? onStop : onPlay}
           className={`px-4 py-1.5 rounded font-medium text-sm cursor-pointer ${

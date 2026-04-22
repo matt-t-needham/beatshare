@@ -139,13 +139,15 @@ export function DrumGrid({
                 className="bg-zinc-800 text-zinc-400 text-[9px] px-0.5 py-0 rounded border border-zinc-700 outline-none cursor-pointer w-8 h-4"
                 title="Swap sample"
               >
-                {grouped.map(({ category, samples }) =>
-                  samples.map(name => (
-                    <option key={name} value={name}>
-                      {category.abbr} {name.split('/').pop()?.replace(/\.[^.]+$/, '')}
-                    </option>
-                  ))
-                )}
+                {grouped.map(({ category, samples }) => (
+                  <optgroup key={category.id} label={category.name}>
+                    {samples.map(name => (
+                      <option key={name} value={name}>
+                        {name.split('/').pop()?.replace(/\.[^.]+$/, '')}
+                      </option>
+                    ))}
+                  </optgroup>
+                ))}
               </select>
             </div>
 
@@ -224,15 +226,18 @@ export function DrumGrid({
             className="bg-zinc-800 text-zinc-400 text-xs px-2 py-0.5 rounded border border-zinc-700 outline-none cursor-pointer"
           >
             <option value="" disabled>+ Add lane...</option>
-            {grouped.map(({ category, samples }) =>
-              samples
-                .filter(name => !lanes.some(l => l.sampleName === name))
-                .map(name => (
-                  <option key={name} value={name}>
-                    {category.abbr} — {name.split('/').pop()?.replace(/\.[^.]+$/, '')}
-                  </option>
-                ))
-            )}
+            {grouped.map(({ category, samples }) => {
+              const available = samples.filter(name => !lanes.some(l => l.sampleName === name));
+              return available.length > 0 ? (
+                <optgroup key={category.id} label={category.name}>
+                  {available.map(name => (
+                    <option key={name} value={name}>
+                      {name.split('/').pop()?.replace(/\.[^.]+$/, '')}
+                    </option>
+                  ))}
+                </optgroup>
+              ) : null;
+            })}
           </select>
         </div>
       )}
