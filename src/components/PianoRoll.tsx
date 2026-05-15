@@ -2,6 +2,7 @@ import { useMemo, useRef, useEffect, useCallback } from 'react';
 import type { Track, MusicalKey, ScaleType, GridResolution } from '../types';
 import { ticksPerStep, midiNoteToName } from '../types';
 import { getScaleNotes, getCenteredScaleNotes } from '../scales';
+import { STEP_CELL_W, STICKY_COL_W, CONTROLS_W, ROW_LABEL_W, CELL_GAP } from './StepGrid';
 
 interface PianoRollProps {
   track: Track;
@@ -13,10 +14,8 @@ interface PianoRollProps {
   onSetStep: (trackId: string, position: number, note: number, duration: number) => void;
   onClearStep: (trackId: string, position: number) => void;
   zoom?: number;
-  /** Compact mode: 9 rows (4 below + root + 4 above), for sample tracks */
   compact?: boolean;
-  /** Ref callback to register the grid container for synchronized scrolling */
-  scrollRef?: (el: HTMLDivElement | null) => void;
+  controlsPanel?: React.ReactNode;
 }
 
 export function PianoRoll({
@@ -25,19 +24,17 @@ export function PianoRoll({
   songScale,
   resolution,
   measures,
-  currentCol,
+  // currentCol unused — global playhead overlay handles indication
   onSetStep,
   onClearStep,
   zoom = 1,
   compact = false,
-  scrollRef,
+  controlsPanel,
 }: PianoRollProps) {
   const stepSize = ticksPerStep(resolution);
   const totalSteps = resolution * measures;
-  const stepsPerBeat = resolution / 4; // quarter note beats
+  const stepsPerBeat = resolution / 4;
 
-  // For synth: 10 scale notes based on track octave
-  // For compact (sample): 9 notes centered on octave 4 root (4 below + root + 4 above)
   const octave = compact ? 4 : (track.synth?.octave ?? 0) + 4;
   const scaleNotes = useMemo(
     () => compact
@@ -46,23 +43,17 @@ export function PianoRoll({
     [songKey, songScale, octave, compact],
   );
 
-  // Reversed for display: highest note at top
   const rows = useMemo(() => [...scaleNotes].reverse(), [scaleNotes]);
 
-  // Map step positions to their notes for quick lookup
   const stepMap = useMemo(() => {
-    const map = new Map<number, number>(); // position -> note
+    const map = new Map<number, number>();
     for (const step of track.steps) {
       map.set(step.position, step.note);
     }
     return map;
   }, [track.steps]);
 
-  // Drag state
-  const dragRef = useRef<{
-    mode: 'paint' | 'erase';
-    note: number;
-  } | null>(null);
+  const dragRef = useRef<{ mode: 'paint' | 'erase'; note: number } | null>(null);
 
   useEffect(() => {
     const handleMouseUp = () => { dragRef.current = null; };
@@ -92,26 +83,34 @@ export function PianoRoll({
     }
   }, [track.id, stepSize, onSetStep, onClearStep]);
 
-  const cellW = Math.round(28 * zoom);
-  const cellH = Math.round(14 * zoom);
+  const cellW = Math.round(STEP_CELL_W * zoom);
+  const cellH = Math.round(STEP_CELL_W * zoom);
 
   return (
-    <div className="relative select-none mt-1">
-      {/* Note labels — absolute so they don't shift the grid */}
-      <div className="absolute flex flex-col gap-px" style={{ right: '100%', top: 0, paddingRight: 2 }}>
-        {rows.map(note => (
-          <div
-            key={note}
-            style={{ height: cellH }}
-            className="flex items-center justify-end text-[9px] font-mono text-zinc-500 whitespace-nowrap"
-          >
-            {midiNoteToName(note)}
-          </div>
-        ))}
+    <div className="flex select-none">
+      {/* Sticky left panel — controls (left zone) + note labels (right zone) */}
+      <div
+        className="sticky left-0 z-10 bg-zinc-800 shrink-0 flex"
+        style={{ width: STICKY_COL_W }}
+      >
+        <div style={{ width: CONTROLS_W }} className="border-r border-zinc-700/60">
+          {controlsPanel}
+        </div>
+        <div style={{ width: ROW_LABEL_W }} className="flex flex-col gap-px">
+          {rows.map(note => (
+            <div
+              key={note}
+              className="flex items-center justify-end pr-3 text-xs font-mono text-zinc-300 whitespace-nowrap"
+              style={{ height: cellH }}
+            >
+              {midiNoteToName(note)}
+            </div>
+          ))}
+        </div>
       </div>
 
-      {/* Grid */}
-      <div ref={scrollRef} className="flex flex-col gap-px overflow-hidden">
+      {/* Cells column — visual gap from sticky edge */}
+      <div className="flex flex-col gap-px shrink-0" style={{ marginLeft: CELL_GAP }}>
         {rows.map(note => (
           <div key={note} className="flex gap-px">
             {Array.from({ length: totalSteps }, (_, col) => {
@@ -120,7 +119,6 @@ export function PianoRoll({
               const isActive = stepNote === note;
               const hasOtherNote = stepNote !== undefined && stepNote !== note;
               const isOnBeat = col % stepsPerBeat === 0;
-              const isCurrent = col === currentCol;
 
               return (
                 <button
@@ -134,7 +132,6 @@ export function PianoRoll({
                   style={{ width: cellW, height: cellH }}
                   className={`
                     shrink-0 rounded-sm cursor-pointer transition-colors
-                    ${isCurrent ? 'ring-1 ring-purple-400' : ''}
                     ${isActive
                       ? 'bg-purple-500 hover:bg-purple-400'
                       : hasOtherNote

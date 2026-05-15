@@ -2,8 +2,18 @@ import { useMemo, useRef, useEffect, useState, useCallback, type KeyboardEvent }
 import type { Song, Track, GridResolution, InstalledPack } from '../types';
 import { ticksPerStep, midiNoteToName } from '../types';
 import { TrackSettings } from './TrackSettings';
+import { DrumGrid } from './DrumGrid';
+import { PianoRoll } from './PianoRoll';
 import { classifySample, friendlyName, SYNTH_COLOR } from '../sample-categories';
 import { Tooltip } from './Tooltip';
+
+// Shared grid geometry — every row in the global grid uses these constants.
+export const STEP_CELL_W = 28;        // px at zoom 1.0
+export const STEP_GAP = 1;            // gap-px between cells
+export const STICKY_COL_W = 360;      // total sticky left column width
+export const CONTROLS_W = 200;        // sub-zone within sticky col: expanded controls
+export const ROW_LABEL_W = STICKY_COL_W - CONTROLS_W; // sub-zone: per-row label (note name / lane controls)
+export const CELL_GAP = 8;            // visual gap between sticky panel and the first cell
 
 interface StepGridProps {
   song: Song;
@@ -26,6 +36,12 @@ interface StepGridProps {
   installedPacks?: InstalledPack[];
   addTrackSlot?: React.ReactNode;
   zoom?: number;
+}
+
+function trackTypeLabel(track: Track): string {
+  if (track.type === 'synth') return 'Syn';
+  if (track.type === 'drum-machine') return 'Drm';
+  return 'Smp';
 }
 
 export function StepGrid({
@@ -101,143 +117,193 @@ export function StepGrid({
     return () => document.removeEventListener('mouseup', handleMouseUp);
   }, []);
 
-  // Synchronized horizontal scrolling
-  const scrollContainerRef = useRef<HTMLDivElement>(null);
-  const stepRowRefs = useRef<(HTMLDivElement | null)[]>([]);
-  const pianoRollRefs = useRef<(HTMLDivElement | null)[]>([]);
+  // Single horizontal scroll viewport. The custom bottom scrollbar and this
+  // viewport drive each other; guard with a flag to prevent feedback loops.
+  const viewportRef = useRef<HTMLDivElement>(null);
+  const scrollbarRef = useRef<HTMLDivElement>(null);
+  const syncSource = useRef<'viewport' | 'scrollbar' | null>(null);
   const [scrollFade, setScrollFade] = useState(false);
   const scrollFadeTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
 
-  const cellSize = Math.round(28 * zoom);
-  const totalGridWidth = totalSteps * (cellSize + 1); // cells + gap-px
+  const cellSize = Math.round(STEP_CELL_W * zoom);
+  const totalGridWidth = totalSteps * (cellSize + STEP_GAP);
+  const fullWidth = STICKY_COL_W + CELL_GAP + totalGridWidth;
 
-  const handleScrollbarScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
-    const scrollLeft = e.currentTarget.scrollLeft;
-    stepRowRefs.current.forEach(el => {
-      if (el) el.scrollLeft = scrollLeft;
-    });
-    pianoRollRefs.current.forEach(el => {
-      if (el) el.scrollLeft = scrollLeft;
-    });
+  const showScrollFade = useCallback(() => {
     setScrollFade(true);
     if (scrollFadeTimer.current) clearTimeout(scrollFadeTimer.current);
     scrollFadeTimer.current = setTimeout(() => setScrollFade(false), 1200);
   }, []);
 
-  // Also handle wheel on the grid area
-  const handleGridWheel = useCallback((e: React.WheelEvent) => {
-    if (scrollContainerRef.current && e.deltaX !== 0) {
-      scrollContainerRef.current.scrollLeft += e.deltaX;
+  const handleViewportScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
+    if (syncSource.current === 'scrollbar') return;
+    syncSource.current = 'viewport';
+    if (scrollbarRef.current) {
+      scrollbarRef.current.scrollLeft = e.currentTarget.scrollLeft;
     }
-  }, []);
+    showScrollFade();
+    requestAnimationFrame(() => { syncSource.current = null; });
+  }, [showScrollFade]);
+
+  const handleScrollbarScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
+    if (syncSource.current === 'viewport') return;
+    syncSource.current = 'scrollbar';
+    if (viewportRef.current) {
+      viewportRef.current.scrollLeft = e.currentTarget.scrollLeft;
+    }
+    showScrollFade();
+    requestAnimationFrame(() => { syncSource.current = null; });
+  }, [showScrollFade]);
 
   const trackCount = song.tracks.length;
 
   return (
-    <div className="flex-1 overflow-y-auto px-2 py-2" onWheel={handleGridWheel}>
-      <div className="flex flex-col gap-1">
-        {song.tracks.length === 0 ? (
-          <div className="flex items-center justify-center py-12">
-            <div className="max-w-md text-center space-y-4">
-              <h2 className="text-2xl font-bold text-white">Ready to make something dreadful?</h2>
-              <p className="text-zinc-300 text-sm">
-                BeatShare is a browser-based music sequencer, light on options and high on speed and sharing! Chuck some things together with inbuilt synth engines and open-source samples.
-              </p>
-              <div className="text-left space-y-3 text-sm text-zinc-400">
-                <div>
-                  <span className="text-zinc-200 font-medium">Sound Packs:</span> Crack open the <span className="text-purple-400">Sound Packs</span> panel down the bottom to grab drum kits and sample packs.
+    <div className="flex-1 flex flex-col overflow-y-auto">
+      <div
+        ref={viewportRef}
+        onScroll={handleViewportScroll}
+        className="flex-1 overflow-x-auto overflow-y-visible no-x-scrollbar px-2 py-2 bg-zinc-950"
+      >
+        <div className="relative" style={{ minWidth: fullWidth, width: fullWidth }}>
+          {/* Global playhead — single soft yellow bar across all rows */}
+          {currentCol !== null && song.tracks.length > 0 && (
+            <div
+              className="absolute top-0 bottom-0 pointer-events-none"
+              style={{
+                left: STICKY_COL_W + CELL_GAP + currentCol * (cellSize + STEP_GAP),
+                width: cellSize,
+                background: 'rgba(250, 204, 21, 0.18)',
+                borderLeft: '1px solid rgba(250, 204, 21, 0.45)',
+                borderRight: '1px solid rgba(250, 204, 21, 0.45)',
+                zIndex: 5,
+              }}
+            />
+          )}
+          {song.tracks.length === 0 ? (
+            <div className="flex items-center justify-center py-12">
+              <div className="max-w-md text-center space-y-4">
+                <h2 className="text-2xl font-bold text-white">Ready to make something dreadful?</h2>
+                <p className="text-zinc-300 text-sm">
+                  BeatShare is a browser-based music sequencer, light on options and high on speed and sharing! Chuck some things together with inbuilt synth engines and open-source samples.
+                </p>
+                <div className="text-left space-y-3 text-sm text-zinc-400">
+                  <div>
+                    <span className="text-zinc-200 font-medium">Sound Packs:</span> Crack open the <span className="text-purple-400">Sound Packs</span> panel down the bottom to grab drum kits and sample packs.
+                  </div>
+                  <div>
+                    <span className="text-zinc-200 font-medium">Spin &amp; Spin+:</span> <span className="text-purple-400">Spin</span> will fetch you six random samples from the Open Samples repo. <span className="text-purple-400">Spin+</span> grabs a six more for when you're feeling greedy.
+                  </div>
+                  <div>
+                    <span className="text-zinc-200 font-medium">Sharing &amp; Importing:</span> Hit <span className="text-purple-400">Share</span> to copy a link with your whole song baked in (it'll be long!). Save a <code className="text-purple-300">.beatshare</code> file to share it easily, then crack open one from somebody else.
+                  </div>
                 </div>
-                <div>
-                  <span className="text-zinc-200 font-medium">Spin &amp; Spin+:</span> <span className="text-purple-400">Spin</span> will fetch you six random samples from the Open Samples repo. <span className="text-purple-400">Spin+</span> grabs a six more for when you're feeling greedy.
-                </div>
-                <div>
-                  <span className="text-zinc-200 font-medium">Sharing &amp; Importing:</span> Hit <span className="text-purple-400">Share</span> to copy a link with your whole song baked in (it'll be long!). Save a <code className="text-purple-300">.beatshare</code> file to share it easily, then crack open one from somebody else.
-                </div>
+                <p className="text-zinc-500 text-xs pt-2">
+                  Add a synth or sample track below to get bumping and whizzing.
+                </p>
               </div>
-              <p className="text-zinc-500 text-xs pt-2">
-                Add a synth or sample track below to get bumping and whizzing.
-              </p>
             </div>
-          </div>
-        ) : (
-          song.tracks.map((track, idx) => (
-            <div key={track.id}>
-              <TrackRow
-                track={track}
-                index={idx}
-                totalSteps={totalSteps}
-                stepSize={stepSize}
-                stepsPerBeat={stepsPerBeat}
-                stepsPerBar={stepsPerBar}
-                cellSize={cellSize}
-                selected={track.id === selectedTrackId}
-                soloed={soloTrackId === track.id}
-                currentCol={currentCol}
-                expanded={expandedTrackIds.has(track.id)}
-                onSelect={() => onSelectTrack(track.id)}
-                onToggleExpanded={() => toggleExpanded(track.id)}
-                onMute={() => onMuteTrack(track.id, !track.muted)}
-                onSolo={() => onSoloTrack(track.id)}
-                onRemove={() => onRemoveTrack(track.id)}
-                onClone={() => onCloneTrack(track)}
-                onMoveUp={idx > 0 ? () => onMoveTrack(idx, idx - 1) : undefined}
-                onMoveDown={idx < trackCount - 1 ? () => onMoveTrack(idx, idx + 1) : undefined}
-                stepRowRef={el => { stepRowRefs.current[idx] = el; }}
-                onStepMouseDown={track.type === 'drum-machine' ? undefined : (col, isActive) => {
-                  const position = col * stepSize;
-                  const defaultNote = track.synth ? ((track.synth.octave + 4) * 12 + 24) : 60;
-                  const brushSample = track.type === 'sample' ? track.sample?.sampleName : undefined;
-                  if (isActive) {
-                    dragRef.current = { trackId: track.id, mode: 'erase', note: defaultNote, stepSize, sampleName: brushSample };
-                    onClearStep(track.id, position);
-                  } else {
-                    dragRef.current = { trackId: track.id, mode: 'paint', note: defaultNote, stepSize, sampleName: brushSample };
-                    onSetStep(track.id, position, defaultNote, stepSize, brushSample);
+          ) : (
+            song.tracks.map((track, idx) => (
+              <div key={track.id} className="mb-1">
+                <TrackRow
+                  track={track}
+                  totalSteps={totalSteps}
+                  stepSize={stepSize}
+                  stepsPerBeat={stepsPerBeat}
+                  stepsPerBar={stepsPerBar}
+                  cellSize={cellSize}
+                  selected={track.id === selectedTrackId}
+                  soloed={soloTrackId === track.id}
+                  currentCol={currentCol}
+                  expanded={expandedTrackIds.has(track.id)}
+                  onSelect={() => onSelectTrack(track.id)}
+                  onToggleExpanded={() => toggleExpanded(track.id)}
+                  onMute={() => onMuteTrack(track.id, !track.muted)}
+                  onSolo={() => onSoloTrack(track.id)}
+                  onRemove={() => onRemoveTrack(track.id)}
+                  onClone={() => onCloneTrack(track)}
+                  onMoveUp={idx > 0 ? () => onMoveTrack(idx, idx - 1) : undefined}
+                  onMoveDown={idx < trackCount - 1 ? () => onMoveTrack(idx, idx + 1) : undefined}
+                  onStepMouseDown={track.type === 'drum-machine' ? undefined : (col, isActive) => {
+                    const position = col * stepSize;
+                    const defaultNote = track.synth ? ((track.synth.octave + 4) * 12 + 24) : 60;
+                    const brushSample = track.type === 'sample' ? track.sample?.sampleName : undefined;
+                    if (isActive) {
+                      dragRef.current = { trackId: track.id, mode: 'erase', note: defaultNote, stepSize, sampleName: brushSample };
+                      onClearStep(track.id, position);
+                    } else {
+                      dragRef.current = { trackId: track.id, mode: 'paint', note: defaultNote, stepSize, sampleName: brushSample };
+                      onSetStep(track.id, position, defaultNote, stepSize, brushSample);
+                    }
+                  }}
+                  onStepMouseEnter={track.type === 'drum-machine' ? undefined : (col) => {
+                    const drag = dragRef.current;
+                    if (!drag || drag.trackId !== track.id) return;
+                    const position = col * stepSize;
+                    if (drag.mode === 'paint') {
+                      onSetStep(track.id, position, drag.note, drag.stepSize, drag.sampleName);
+                    } else {
+                      onClearStep(track.id, position);
+                    }
+                  }}
+                  onRename={(name) => onUpdateTrack(track.id, { name })}
+                />
+                {expandedTrackIds.has(track.id) && (() => {
+                  const controlsPanel = (
+                    <TrackSettings
+                      track={track}
+                      onUpdate={(updates) => onUpdateTrack(track.id, updates)}
+                      installedPacks={installedPacks}
+                      resolution={resolution}
+                    />
+                  );
+                  if (track.type === 'drum-machine') {
+                    return (
+                      <DrumGrid
+                        track={track}
+                        resolution={resolution}
+                        measures={song.measures}
+                        currentCol={currentCol}
+                        onSetDrumStep={onSetDrumStep}
+                        onClearDrumStep={onClearDrumStep}
+                        onUpdateTrack={(updates) => onUpdateTrack(track.id, updates)}
+                        installedPacks={installedPacks}
+                        zoom={zoom}
+                        controlsPanel={controlsPanel}
+                      />
+                    );
                   }
-                }}
-                onStepMouseEnter={track.type === 'drum-machine' ? undefined : (col) => {
-                  const drag = dragRef.current;
-                  if (!drag || drag.trackId !== track.id) return;
-                  const position = col * stepSize;
-                  if (drag.mode === 'paint') {
-                    onSetStep(track.id, position, drag.note, drag.stepSize, drag.sampleName);
-                  } else {
-                    onClearStep(track.id, position);
-                  }
-                }}
-                onRename={(name) => onUpdateTrack(track.id, { name })}
-              />
-              {expandedTrackIds.has(track.id) && (
-                <div className="mb-1">
-                  <TrackSettings
-                    track={track}
-                    onUpdate={(updates) => onUpdateTrack(track.id, updates)}
-                    inline
-                    installedPacks={installedPacks}
-                    songKey={song.key}
-                    songScale={song.scale}
-                    resolution={resolution}
-                    measures={song.measures}
-                    currentCol={currentCol}
-                    onSetStep={(trackId, position, note, duration) => onSetStep(trackId, position, note, duration)}
-                    onClearStep={onClearStep}
-                    onSetDrumStep={onSetDrumStep}
-                    onClearDrumStep={onClearDrumStep}
-                    zoom={zoom}
-                    scrollRef={el => { pianoRollRefs.current[idx] = el; }}
-                  />
-                </div>
-              )}
+                  return (
+                    <PianoRoll
+                      track={track}
+                      songKey={song.key}
+                      songScale={song.scale}
+                      resolution={resolution}
+                      measures={song.measures}
+                      currentCol={currentCol}
+                      onSetStep={(trackId, position, note, duration) => onSetStep(trackId, position, note, duration)}
+                      onClearStep={onClearStep}
+                      zoom={zoom}
+                      compact={track.type === 'sample'}
+                      controlsPanel={controlsPanel}
+                    />
+                  );
+                })()}
+              </div>
+            ))
+          )}
+          {addTrackSlot && (
+            <div className="sticky left-0 z-10" style={{ width: 'fit-content' }}>
+              {addTrackSlot}
             </div>
-          ))
-        )}
-        {addTrackSlot}
+          )}
+        </div>
       </div>
 
       {/* Global horizontal scrollbar */}
       {song.tracks.length > 0 && (
         <div
-          ref={scrollContainerRef}
+          ref={scrollbarRef}
           onScroll={handleScrollbarScroll}
           className={`grid-scrollbar overflow-x-auto mt-1 transition-opacity duration-500 ${scrollFade ? 'opacity-100' : 'opacity-0 hover:opacity-100'}`}
           style={{
@@ -245,7 +311,7 @@ export function StepGrid({
             scrollbarColor: 'rgba(255,255,255,0.3) transparent',
           }}
         >
-          <div style={{ width: totalGridWidth, height: 8 }} />
+          <div style={{ width: fullWidth, height: 8 }} />
         </div>
       )}
     </div>
@@ -254,7 +320,6 @@ export function StepGrid({
 
 interface TrackRowProps {
   track: Track;
-  index: number;
   totalSteps: number;
   stepSize: number;
   stepsPerBeat: number;
@@ -275,7 +340,6 @@ interface TrackRowProps {
   onStepMouseDown?: (col: number, isActive: boolean) => void;
   onStepMouseEnter?: (col: number) => void;
   onRename: (name: string) => void;
-  stepRowRef?: (el: HTMLDivElement | null) => void;
 }
 
 function TrackRow({
@@ -300,7 +364,6 @@ function TrackRow({
   onStepMouseDown,
   onStepMouseEnter,
   onRename,
-  stepRowRef,
 }: TrackRowProps) {
   const [editing, setEditing] = useState(false);
   const [editName, setEditName] = useState(track.name);
@@ -329,7 +392,6 @@ function TrackRow({
     const map = new Map<number, { note: number; sampleName?: string }>();
     for (const step of track.steps) {
       const col = Math.floor(step.position / stepSize);
-      // For drum machines, keep the first active step per column (merged view)
       if (!map.has(col)) {
         map.set(col, { note: step.note, sampleName: step.sampleName });
       }
@@ -337,191 +399,183 @@ function TrackRow({
     return map;
   }, [track.steps, stepSize]);
 
-  // Get the track's active color (for step cells)
   const trackColor = useMemo(() => {
     if (track.type === 'sample' && track.sample?.sampleName) {
       const cat = classifySample(track.sample.sampleName);
       return { color: cat.color, hoverColor: cat.hoverColor };
     }
     if (track.type === 'drum-machine') {
-      return { color: '#8855cc', hoverColor: '#9966dd' }; // violet for drum machine
+      return { color: '#8855cc', hoverColor: '#9966dd' };
     }
     return SYNTH_COLOR;
   }, [track.type, track.sample?.sampleName]);
 
+  const typeLabel = trackTypeLabel(track);
+  const rowBg = selected ? 'bg-zinc-800/70' : 'hover:bg-zinc-800/30';
+
   return (
-    <div
-      className={`rounded px-1 py-1 ${
-        selected ? 'bg-zinc-800/70' : 'hover:bg-zinc-800/30'
-      }`}
-      onClick={onSelect}
-    >
-      {/* Top row: icons + label */}
-      <div className="flex items-center gap-1 mb-1">
-        <Tooltip text={expanded ? 'Collapse settings' : 'Expand settings'}>
-          <button
-            onClick={e => { e.stopPropagation(); onToggleExpanded(); }}
-            className="w-7 h-7 rounded bg-zinc-700 text-zinc-400 hover:bg-zinc-600 hover:text-white cursor-pointer flex items-center justify-center border border-zinc-600"
-          >
-            <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-              <path
-                d={expanded ? 'M2 7.5L6 3.5L10 7.5' : 'M2 4.5L6 8.5L10 4.5'}
-                stroke="currentColor"
-                strokeWidth="1.5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg>
-          </button>
-        </Tooltip>
-        <Tooltip text={track.muted ? 'Unmute' : 'Mute'}>
-          <button
-            onClick={e => { e.stopPropagation(); onMute(); }}
-            className={`w-7 h-7 rounded cursor-pointer flex items-center justify-center border ${
-              track.muted ? 'bg-yellow-600 text-white border-yellow-500' : 'bg-zinc-700 text-zinc-400 hover:bg-zinc-600 border-zinc-600'
-            }`}
-          >
-            {track.muted ? (
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M11 5L6 9H2v6h4l5 4V5z" />
-                <line x1="23" y1="9" x2="17" y2="15" />
-                <line x1="17" y1="9" x2="23" y2="15" />
+    <div className={`rounded ${rowBg}`} onClick={onSelect}>
+      {/* Step row: sticky left col (all controls) + cells */}
+      <div className="flex">
+        <div
+          className="sticky left-0 z-10 flex items-center gap-1 pl-1.5 pr-2 bg-zinc-800 border-r-2 border-zinc-700 shadow-[2px_0_4px_rgba(0,0,0,0.3)] shrink-0"
+          style={{ width: STICKY_COL_W, height: cellSize }}
+          onClick={e => e.stopPropagation()}
+        >
+          <Tooltip text={expanded ? 'Collapse settings' : 'Expand settings'}>
+            <button
+              onClick={e => { e.stopPropagation(); onToggleExpanded(); }}
+              className="w-5 h-5 rounded bg-zinc-700 text-zinc-300 hover:bg-zinc-600 hover:text-white cursor-pointer flex items-center justify-center border border-zinc-600 shrink-0"
+            >
+              <svg width="9" height="9" viewBox="0 0 12 12" fill="none">
+                <path
+                  d={expanded ? 'M2 7.5L6 3.5L10 7.5' : 'M2 4.5L6 8.5L10 4.5'}
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
               </svg>
-            ) : (
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M11 5L6 9H2v6h4l5 4V5z" />
-                <path d="M19.07 4.93a10 10 0 010 14.14M15.54 8.46a5 5 0 010 7.07" />
-              </svg>
-            )}
-          </button>
-        </Tooltip>
-        <Tooltip text={soloed ? 'Un-solo' : 'Solo (play only this track)'}>
-          <button
-            onClick={e => { e.stopPropagation(); onSolo(); }}
-            className={`w-7 h-7 rounded cursor-pointer flex items-center justify-center text-xs font-bold border ${
-              soloed ? 'bg-blue-600 text-white border-blue-500' : 'bg-zinc-700 text-zinc-400 hover:bg-zinc-600 border-zinc-600'
-            }`}
+            </button>
+          </Tooltip>
+          <span
+            className="text-[10px] font-mono uppercase tracking-wider shrink-0 w-7"
+            style={{ color: trackColor.color }}
           >
-            S
-          </button>
-        </Tooltip>
-        <Tooltip text="Clone track">
-          <button
-            onClick={e => { e.stopPropagation(); onClone(); }}
-            className="w-7 h-7 rounded bg-zinc-700 text-zinc-400 hover:bg-purple-600 hover:text-white cursor-pointer flex items-center justify-center border border-zinc-600"
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
-              <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" />
-            </svg>
-          </button>
-        </Tooltip>
-        <Tooltip text="Remove track">
-          <button
-            onClick={e => { e.stopPropagation(); onRemove(); }}
-            className="w-7 h-7 rounded bg-zinc-700 text-zinc-400 hover:bg-red-700 hover:text-white cursor-pointer flex items-center justify-center text-sm border border-zinc-600"
-          >
-            ×
-          </button>
-        </Tooltip>
-        {editing ? (
-          <input
-            ref={inputRef}
-            value={editName}
-            onChange={e => setEditName(e.target.value)}
-            onBlur={commitRename}
-            onKeyDown={handleKeyDown}
-            className="text-xs text-white bg-zinc-800 border border-purple-500 rounded px-1 py-0.5 min-w-0 outline-none w-28 ml-1"
-            onClick={e => e.stopPropagation()}
-          />
-        ) : (
-          <Tooltip text="Double-click to rename">
+            {typeLabel}
+          </span>
+          {editing ? (
+            <input
+              ref={inputRef}
+              value={editName}
+              onChange={e => setEditName(e.target.value)}
+              onBlur={commitRename}
+              onKeyDown={handleKeyDown}
+              className="text-xs text-white bg-zinc-900 border border-purple-500 rounded px-1 py-0.5 min-w-0 outline-none flex-1"
+              onClick={e => e.stopPropagation()}
+            />
+          ) : (
             <span
-              className="text-xs text-zinc-300 truncate cursor-default hover:text-white ml-1"
-              onDoubleClick={(e) => { e.stopPropagation(); startEditing(); }}
+              className="text-xs text-zinc-200 truncate cursor-text hover:text-white flex-1 min-w-0"
+              onClick={(e) => { e.stopPropagation(); startEditing(); }}
+              title="Click to rename"
             >
               {track.name}
             </span>
+          )}
+          <Tooltip text={track.muted ? 'Unmute' : 'Mute'}>
+            <button
+              onClick={e => { e.stopPropagation(); onMute(); }}
+              className={`w-5 h-5 rounded cursor-pointer flex items-center justify-center text-[10px] font-bold border shrink-0 ${
+                track.muted ? 'bg-yellow-600 text-white border-yellow-500' : 'bg-zinc-700 text-zinc-300 hover:bg-zinc-600 border-zinc-600'
+              }`}
+            >
+              M
+            </button>
           </Tooltip>
-        )}
-        <div className="flex-1" />
-        {/* Up/down reorder buttons */}
-        <Tooltip text="Move up">
-          <button
-            onClick={e => { e.stopPropagation(); onMoveUp?.(); }}
-            disabled={!onMoveUp}
-            className="w-6 h-6 rounded bg-zinc-700 hover:bg-zinc-600 disabled:opacity-30 disabled:cursor-default cursor-pointer flex items-center justify-center border border-zinc-600 text-zinc-400 hover:text-zinc-200 shrink-0"
-          >
-            <svg width="10" height="6" viewBox="0 0 10 6" fill="none"><path d="M1 5L5 1L9 5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
-          </button>
-        </Tooltip>
-        <Tooltip text="Move down">
-          <button
-            onClick={e => { e.stopPropagation(); onMoveDown?.(); }}
-            disabled={!onMoveDown}
-            className="w-6 h-6 rounded bg-zinc-700 hover:bg-zinc-600 disabled:opacity-30 disabled:cursor-default cursor-pointer flex items-center justify-center border border-zinc-600 text-zinc-400 hover:text-zinc-200 shrink-0"
-          >
-            <svg width="10" height="6" viewBox="0 0 10 6" fill="none"><path d="M1 1L5 5L9 1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
-          </button>
-        </Tooltip>
-      </div>
-
-      {/* Step cells */}
-      <div ref={stepRowRef} className="flex gap-px overflow-hidden" onMouseLeave={() => {}}>
-        {Array.from({ length: totalSteps }, (_, col) => {
-          const active = activeSteps.get(col);
-          const isOnBeat = col % stepsPerBeat === 0;
-          const isBarStart = col > 0 && col % stepsPerBar === 0;
-          const isCurrent = col === currentCol;
-
-          // Per-step color: sample tracks show per-step category color, synth tracks show track color
-          const stepSampleName = active?.sampleName;
-          const stepColor = stepSampleName
-            ? classifySample(stepSampleName)
-            : null;
-
-          const activeColor = stepColor ? stepColor.color : trackColor.color;
-          const activeHover = stepColor ? stepColor.hoverColor : trackColor.hoverColor;
-
-          const stepLabel = active
-            ? (stepSampleName ? classifySample(stepSampleName).abbr : track.type === 'synth' ? midiNoteToName(active.note).replace(/\d+/, '') : track.type === 'drum-machine' ? '' : '')
-            : '';
-
-          return (
-            <div key={col} className="relative shrink-0" style={{ width: cellSize }}>
-              {/* Bar separator line — overlaid, doesn't displace cell */}
-              {isBarStart && (
-                <div className="absolute left-0 top-0 bottom-0 w-px" style={{ backgroundColor: 'rgba(255,255,255,0.18)', marginLeft: -1 }} />
-              )}
+          <Tooltip text={soloed ? 'Un-solo' : 'Solo'}>
+            <button
+              onClick={e => { e.stopPropagation(); onSolo(); }}
+              className={`w-5 h-5 rounded cursor-pointer flex items-center justify-center text-[10px] font-bold border shrink-0 ${
+                soloed ? 'bg-blue-600 text-white border-blue-500' : 'bg-zinc-700 text-zinc-300 hover:bg-zinc-600 border-zinc-600'
+              }`}
+            >
+              S
+            </button>
+          </Tooltip>
+          <Tooltip text="Clone track">
+            <button
+              onClick={e => { e.stopPropagation(); onClone(); }}
+              className="w-5 h-5 rounded bg-zinc-700 text-zinc-300 hover:bg-purple-600 hover:text-white cursor-pointer flex items-center justify-center border border-zinc-600 shrink-0"
+            >
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" />
+              </svg>
+            </button>
+          </Tooltip>
+          <Tooltip text="Remove track">
+            <button
+              onClick={e => { e.stopPropagation(); onRemove(); }}
+              className="w-5 h-5 rounded bg-zinc-700 text-zinc-300 hover:bg-red-700 hover:text-white cursor-pointer flex items-center justify-center text-xs leading-none border border-zinc-600 shrink-0"
+            >
+              ×
+            </button>
+          </Tooltip>
+          <div className="flex flex-col gap-px shrink-0">
+            <Tooltip text="Move up">
               <button
-                onMouseDown={onStepMouseDown ? (e => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  onStepMouseDown(col, !!active);
-                }) : undefined}
-                onMouseEnter={onStepMouseEnter ? (() => onStepMouseEnter(col)) : undefined}
-                style={{
-                  width: cellSize,
-                  height: cellSize,
-                  backgroundColor: active ? activeColor : undefined,
-                }}
-                className={`
-                  rounded-sm text-[9px] font-mono cursor-pointer transition-colors select-none text-white
-                  ${isCurrent ? 'ring-1 ring-purple-400' : ''}
-                  ${!active ? (selected
-                    ? (isOnBeat ? 'bg-zinc-600 hover:bg-zinc-500' : 'bg-zinc-700 hover:bg-zinc-600')
-                    : (isOnBeat ? 'bg-zinc-700 hover:bg-zinc-600' : 'bg-zinc-800 hover:bg-zinc-700')
-                  ) : ''}
-                `}
-                onMouseOver={active ? (e) => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = activeHover; } : undefined}
-                onMouseOut={active ? (e) => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = activeColor; } : undefined}
-                title={active ? (stepSampleName ? friendlyName(stepSampleName) : midiNoteToName(active.note)) : `Step ${col + 1}`}
+                onClick={e => { e.stopPropagation(); onMoveUp?.(); }}
+                disabled={!onMoveUp}
+                className="w-4 h-2.5 rounded-sm bg-zinc-700 hover:bg-zinc-600 disabled:opacity-30 disabled:cursor-default cursor-pointer flex items-center justify-center text-zinc-300"
               >
-                {stepLabel}
+                <svg width="8" height="4" viewBox="0 0 10 6" fill="none"><path d="M1 5L5 1L9 5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
               </button>
-            </div>
-          );
-        })}
+            </Tooltip>
+            <Tooltip text="Move down">
+              <button
+                onClick={e => { e.stopPropagation(); onMoveDown?.(); }}
+                disabled={!onMoveDown}
+                className="w-4 h-2.5 rounded-sm bg-zinc-700 hover:bg-zinc-600 disabled:opacity-30 disabled:cursor-default cursor-pointer flex items-center justify-center text-zinc-300"
+              >
+                <svg width="8" height="4" viewBox="0 0 10 6" fill="none"><path d="M1 1L5 5L9 1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+              </button>
+            </Tooltip>
+          </div>
+        </div>
+
+        <div className="flex gap-px shrink-0" style={{ marginLeft: CELL_GAP }}>
+          {Array.from({ length: totalSteps }, (_, col) => {
+            const active = activeSteps.get(col);
+            const isOnBeat = col % stepsPerBeat === 0;
+            const isBarStart = col > 0 && col % stepsPerBar === 0;
+
+            const stepSampleName = active?.sampleName;
+            const stepColor = stepSampleName
+              ? classifySample(stepSampleName)
+              : null;
+
+            const activeColor = stepColor ? stepColor.color : trackColor.color;
+            const activeHover = stepColor ? stepColor.hoverColor : trackColor.hoverColor;
+
+            const stepLabel = active
+              ? (stepSampleName ? classifySample(stepSampleName).abbr : track.type === 'synth' ? midiNoteToName(active.note).replace(/\d+/, '') : track.type === 'drum-machine' ? '' : '')
+              : '';
+
+            return (
+              <div key={col} className="relative shrink-0" style={{ width: cellSize }}>
+                {isBarStart && (
+                  <div className="absolute left-0 top-0 bottom-0 w-px" style={{ backgroundColor: 'rgba(255,255,255,0.18)', marginLeft: -1 }} />
+                )}
+                <button
+                  onMouseDown={onStepMouseDown ? (e => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    onStepMouseDown(col, !!active);
+                  }) : undefined}
+                  onMouseEnter={onStepMouseEnter ? (() => onStepMouseEnter(col)) : undefined}
+                  style={{
+                    width: cellSize,
+                    height: cellSize,
+                    backgroundColor: active ? activeColor : undefined,
+                  }}
+                  className={`
+                    rounded-sm text-[9px] font-mono cursor-pointer transition-colors select-none text-white
+                    ${!active ? (selected
+                      ? (isOnBeat ? 'bg-zinc-600 hover:bg-zinc-500' : 'bg-zinc-700 hover:bg-zinc-600')
+                      : (isOnBeat ? 'bg-zinc-700 hover:bg-zinc-600' : 'bg-zinc-800 hover:bg-zinc-700')
+                    ) : ''}
+                  `}
+                  onMouseOver={active ? (e) => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = activeHover; } : undefined}
+                  onMouseOut={active ? (e) => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = activeColor; } : undefined}
+                  title={active ? (stepSampleName ? friendlyName(stepSampleName) : midiNoteToName(active.note)) : `Step ${col + 1}`}
+                >
+                  {stepLabel}
+                </button>
+              </div>
+            );
+          })}
+        </div>
       </div>
     </div>
   );

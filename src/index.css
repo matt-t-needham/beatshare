@@ -14,3 +14,12 @@
 .grid-scrollbar::-webkit-scrollbar-thumb:hover {
   background: rgba(255, 255, 255, 0.4);
 }
+
+/* Hide native horizontal scrollbar on the unified grid viewport — the
+   .grid-scrollbar element below drives horizontal scroll instead. */
+.no-x-scrollbar {
+  scrollbar-width: none;
+}
+.no-x-scrollbar::-webkit-scrollbar {
+  display: none;
+}
