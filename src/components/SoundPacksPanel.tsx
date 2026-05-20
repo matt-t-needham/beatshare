@@ -6,6 +6,7 @@ import type { InstalledPack, Song } from '../types';
 import { savePack, removePack, removeSample } from '../sound-pack-store';
 import { executeSpin, SPIN_PACK_ID, type DownloadProgress } from '../spin';
 import { classifySample, friendlyName } from '../sample-categories';
+import { errorMessage } from '../util/error';
 
 const AUDIO_EXTENSIONS = ['.wav', '.mp3', '.ogg', '.flac', '.webm'];
 
@@ -96,8 +97,8 @@ export function SoundPacksPanel({ open, onToggle, installedPacks, onPacksChanged
 
       onPacksChanged();
       onToast(`Got ${result.newSamples.length} samples!`);
-    } catch (err: any) {
-      onToast(`Spin failed: ${err.message}`);
+    } catch (err: unknown) {
+      onToast(`Spin failed: ${errorMessage(err)}`);
     }
     setLoading(null);
     setDownloadProgress(null);
@@ -107,8 +108,8 @@ export function SoundPacksPanel({ open, onToggle, installedPacks, onPacksChanged
     try {
       await removeSample(packId, sampleName);
       onPacksChanged();
-    } catch (err: any) {
-      onToast(`Remove failed: ${err.message}`);
+    } catch (err: unknown) {
+      onToast(`Remove failed: ${errorMessage(err)}`);
     }
   }
 
@@ -146,8 +147,8 @@ export function SoundPacksPanel({ open, onToggle, installedPacks, onPacksChanged
       await savePack(entry, samples);
       onPacksChanged();
       onToast(`Imported ${entry.name} (${samples.size} samples)`);
-    } catch (err: any) {
-      onToast(`Import failed: ${err.message}`);
+    } catch (err: unknown) {
+      onToast(`Import failed: ${errorMessage(err)}`);
     }
     pendingFileRef.current = null;
     setLoading(null);
@@ -194,8 +195,8 @@ export function SoundPacksPanel({ open, onToggle, installedPacks, onPacksChanged
       await savePack(entry, samples);
       onPacksChanged();
       onToast(`Installed ${entry.name} (${samples.size} samples)`);
-    } catch (err: any) {
-      onToast(`Failed: ${err.message}`);
+    } catch (err: unknown) {
+      onToast(`Failed: ${errorMessage(err)}`);
     }
     setLoading(null);
   }
@@ -207,8 +208,8 @@ export function SoundPacksPanel({ open, onToggle, installedPacks, onPacksChanged
       await removePack(packId);
       onPacksChanged();
       onToast('Pack removed');
-    } catch (err: any) {
-      onToast(`Remove failed: ${err.message}`);
+    } catch (err: unknown) {
+      onToast(`Remove failed: ${errorMessage(err)}`);
     }
     setLoading(null);
   }

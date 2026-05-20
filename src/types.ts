@@ -42,18 +42,32 @@ export interface DrumMachineConfig {
   lanes: DrumLane[];
 }
 
-export interface Track {
+interface TrackBase {
   id: string;
   name: string;
-  type: 'synth' | 'sample' | 'drum-machine';
-  synth?: SynthConfig;
-  sample?: SampleConfig;
-  drumMachine?: DrumMachineConfig;
   volume: number;     // 0-1
   muted: boolean;
   effect?: EffectConfig;
   steps: Step[];
 }
+
+export interface SynthTrack extends TrackBase {
+  type: 'synth';
+  synth: SynthConfig;
+}
+
+export interface SampleTrack extends TrackBase {
+  type: 'sample';
+  sample: SampleConfig;
+}
+
+export interface DrumTrack extends TrackBase {
+  type: 'drum-machine';
+  drumMachine: DrumMachineConfig;
+}
+
+export type Track = SynthTrack | SampleTrack | DrumTrack;
+export type TrackType = Track['type'];
 
 export interface Song {
   name: string;
@@ -114,6 +128,73 @@ export interface InstalledPack {
   description: string;
   license: string;
   sampleNames: string[];
+}
+
+// Default values shared across factories, persistence, and audio.
+export const TRACK_DEFAULTS = {
+  volume: 0.7,
+  velocity: 100,
+  waveform: 'sawtooth' as Waveform,
+  synthOctave: 0,
+  synthDecay: 50,
+  samplePitchShift: 0,
+  sampleDecay: 100,
+  effectWet: 0.5,
+} as const;
+
+// Sentinel: sample-track grid-placed steps store this MIDI note to mean "no pitch override".
+// Piano-roll-placed steps store the actual MIDI note.
+export const UNPITCHED_NOTE = 60;
+
+export function isPitched(step: Step): boolean {
+  return step.note !== UNPITCHED_NOTE;
+}
+
+export function newSynthTrack(overrides: Partial<SynthTrack> = {}): SynthTrack {
+  return {
+    id: crypto.randomUUID(),
+    name: 'Synth',
+    type: 'synth',
+    synth: { waveform: TRACK_DEFAULTS.waveform, octave: TRACK_DEFAULTS.synthOctave },
+    volume: TRACK_DEFAULTS.volume,
+    muted: false,
+    steps: [],
+    ...overrides,
+  };
+}
+
+export function newSampleTrack(
+  packId: string,
+  sampleName: string,
+  overrides: Partial<SampleTrack> = {},
+): SampleTrack {
+  return {
+    id: crypto.randomUUID(),
+    name: 'Sample',
+    type: 'sample',
+    sample: { packId, sampleName },
+    volume: TRACK_DEFAULTS.volume,
+    muted: false,
+    steps: [],
+    ...overrides,
+  };
+}
+
+export function newDrumTrack(
+  packId: string,
+  lanes: DrumLane[],
+  overrides: Partial<DrumTrack> = {},
+): DrumTrack {
+  return {
+    id: crypto.randomUUID(),
+    name: 'Drums',
+    type: 'drum-machine',
+    drumMachine: { packId, lanes },
+    volume: TRACK_DEFAULTS.volume,
+    muted: false,
+    steps: [],
+    ...overrides,
+  };
 }
 
 export function createDefaultSong(): Song {

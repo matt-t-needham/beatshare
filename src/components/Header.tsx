@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import type { SongStore } from '../store';
-import type { GridResolution, MusicalKey, ScaleType } from '../types';
+import type { GridResolution, MusicalKey, ScaleType, Song } from '../types';
 import { ALL_KEYS, ALL_SCALES } from '../scales';
 import { importFromFile } from '../persistence';
 import { Tooltip } from './Tooltip';
@@ -19,7 +19,7 @@ interface HeaderProps {
   onStop: () => void;
   onShare: () => void;
   onSaveFile: () => void;
-  onOpenFile: (song: any) => void;
+  onOpenFile: (song: Song) => void;
   onExportMidi: () => void;
   onDoubleUp: () => void;
   onClearAll: () => void;

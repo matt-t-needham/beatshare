@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useState } from 'react';
-import type { Track, Waveform, InstalledPack, GridResolution } from '../types';
-import { ticksPerStep } from '../types';
+import type { Track, SampleTrack, Waveform, InstalledPack, GridResolution } from '../types';
+import { ticksPerStep, TRACK_DEFAULTS } from '../types';
 import { groupSamplesByCategory, friendlyNames } from '../sample-categories';
 import { Tooltip } from './Tooltip';
 
@@ -128,19 +128,19 @@ function SamplePicker({
   installedPacks,
   onUpdate,
 }: {
-  track: Track;
+  track: SampleTrack;
   installedPacks: InstalledPack[];
   onUpdate: (updates: Partial<Track>) => void;
 }) {
-  const pack = installedPacks.find(p => p.id === track.sample?.packId);
+  const pack = installedPacks.find(p => p.id === track.sample.packId);
   const grouped = useMemo(() => pack ? groupSamplesByCategory(pack.sampleNames) : [], [pack]);
   const nameMap = useMemo(() => pack ? friendlyNames(pack.sampleNames) : new Map<string, string>(), [pack]);
 
   return (
     <Row label="Sample">
       <select
-        value={track.sample?.sampleName || ''}
-        onChange={e => onUpdate({ sample: { ...track.sample!, sampleName: e.target.value } })}
+        value={track.sample.sampleName || ''}
+        onChange={e => onUpdate({ sample: { ...track.sample, sampleName: e.target.value } })}
         className="bg-zinc-900 text-zinc-200 text-xs px-1 py-0.5 rounded border border-zinc-600 outline-none cursor-pointer flex-1 min-w-0 h-5"
       >
         {grouped.map(({ category, samples }) =>
@@ -191,13 +191,14 @@ export function TrackSettings({ track, onUpdate, installedPacks = [], resolution
     setPreHumanizeSteps(null);
   }, [preHumanizeSteps, onUpdate]);
 
+  const effect = track.effect;
   const fxBlock = (
     <Row label="FX">
       <select
-        value={track.effect?.id || ''}
+        value={effect?.id || ''}
         onChange={e => {
           const id = e.target.value;
-          onUpdate({ effect: id ? { id, wet: track.effect?.wet ?? 0.5 } : undefined });
+          onUpdate({ effect: id ? { id, wet: effect?.wet ?? TRACK_DEFAULTS.effectWet } : undefined });
         }}
         onClick={e => e.stopPropagation()}
         className="bg-zinc-900 text-zinc-200 text-xs px-1 py-0.5 rounded border border-zinc-600 outline-none cursor-pointer flex-1 min-w-0 h-5"
@@ -207,12 +208,12 @@ export function TrackSettings({ track, onUpdate, installedPacks = [], resolution
           <option key={fx.id} value={fx.id}>{fx.label}</option>
         ))}
       </select>
-      {track.effect && (
+      {effect && (
         <Knob
-          value={Math.round((track.effect.wet ?? 0.5) * 100)}
+          value={Math.round((effect.wet ?? TRACK_DEFAULTS.effectWet) * 100)}
           min={0}
           max={100}
-          onChange={v => onUpdate({ effect: { ...track.effect!, wet: v / 100 } })}
+          onChange={v => onUpdate({ effect: { ...effect, wet: v / 100 } })}
           label="Wet"
           formatValue={v => `${v}%`}
         />
@@ -249,26 +250,26 @@ export function TrackSettings({ track, onUpdate, installedPacks = [], resolution
 
   return (
     <div className="flex flex-col gap-1 px-1.5 py-1.5" onClick={e => e.stopPropagation()}>
-      {track.type === 'synth' && track.synth && (
+      {track.type === 'synth' && (() => { const synth = track.synth; return (
         <>
           <Row label="Wave">
             <WaveSelector
-              value={track.synth.waveform}
-              onChange={w => onUpdate({ synth: { ...track.synth!, waveform: w } })}
+              value={synth.waveform}
+              onChange={w => onUpdate({ synth: { ...synth, waveform: w } })}
             />
           </Row>
           <Row label="Oct">
             <button
-              onClick={e => { e.stopPropagation(); onUpdate({ synth: { ...track.synth!, octave: Math.max(-1, track.synth!.octave - 1) } }); }}
-              disabled={track.synth.octave <= -1}
+              onClick={e => { e.stopPropagation(); onUpdate({ synth: { ...synth, octave: Math.max(-1, synth.octave - 1) } }); }}
+              disabled={synth.octave <= -1}
               className="w-5 h-5 rounded bg-zinc-700 hover:bg-zinc-600 disabled:opacity-30 disabled:cursor-default cursor-pointer flex items-center justify-center border border-zinc-600 text-zinc-300"
             >
               <svg width="8" height="5" viewBox="0 0 10 6" fill="none"><path d="M1 1L5 5L9 1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
             </button>
-            <span className="text-zinc-300 text-xs font-mono w-6 text-center">{track.synth.octave >= 0 ? `+${track.synth.octave}` : String(track.synth.octave)}</span>
+            <span className="text-zinc-300 text-xs font-mono w-6 text-center">{synth.octave >= 0 ? `+${synth.octave}` : String(synth.octave)}</span>
             <button
-              onClick={e => { e.stopPropagation(); onUpdate({ synth: { ...track.synth!, octave: Math.min(1, track.synth!.octave + 1) } }); }}
-              disabled={track.synth.octave >= 1}
+              onClick={e => { e.stopPropagation(); onUpdate({ synth: { ...synth, octave: Math.min(1, synth.octave + 1) } }); }}
+              disabled={synth.octave >= 1}
               className="w-5 h-5 rounded bg-zinc-700 hover:bg-zinc-600 disabled:opacity-30 disabled:cursor-default cursor-pointer flex items-center justify-center border border-zinc-600 text-zinc-300"
             >
               <svg width="8" height="5" viewBox="0 0 10 6" fill="none"><path d="M1 5L5 1L9 5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
@@ -276,10 +277,10 @@ export function TrackSettings({ track, onUpdate, installedPacks = [], resolution
           </Row>
           <KnobPair>
             <Knob
-              value={track.synth.decay ?? 50}
+              value={synth.decay ?? TRACK_DEFAULTS.synthDecay}
               min={0}
               max={100}
-              onChange={v => onUpdate({ synth: { ...track.synth!, decay: v } })}
+              onChange={v => onUpdate({ synth: { ...synth, decay: v } })}
               label="Decay"
               formatValue={v => `${v}%`}
             />
@@ -295,13 +296,13 @@ export function TrackSettings({ track, onUpdate, installedPacks = [], resolution
           {fxBlock}
           {humanizeBlock}
         </>
-      )}
+      ); })()}
 
-      {track.type === 'sample' && (
+      {track.type === 'sample' && (() => { const sample = track.sample; return (
         <>
           <Row label="Pack">
             <select
-              value={track.sample?.packId || ''}
+              value={sample.packId || ''}
               onChange={e => {
                 const packId = e.target.value;
                 const pack = installedPacks.find(p => p.id === packId);
@@ -316,7 +317,7 @@ export function TrackSettings({ track, onUpdate, installedPacks = [], resolution
               ))}
             </select>
           </Row>
-          {track.sample?.packId && (
+          {sample.packId && (
             <SamplePicker
               track={track}
               installedPacks={installedPacks}
@@ -325,19 +326,19 @@ export function TrackSettings({ track, onUpdate, installedPacks = [], resolution
           )}
           <KnobPair>
             <Knob
-              value={track.sample?.pitchShift ?? 0}
+              value={sample.pitchShift ?? TRACK_DEFAULTS.samplePitchShift}
               min={-2}
               max={2}
-              onChange={v => onUpdate({ sample: { ...track.sample!, pitchShift: v } })}
+              onChange={v => onUpdate({ sample: { ...sample, pitchShift: v } })}
               label="Pitch"
               formatValue={v => (v >= 0 ? `+${v}` : String(v))}
               sensitivity={6}
             />
             <Knob
-              value={track.sample?.decay ?? 100}
+              value={sample.decay ?? TRACK_DEFAULTS.sampleDecay}
               min={0}
               max={100}
-              onChange={v => onUpdate({ sample: { ...track.sample!, decay: v } })}
+              onChange={v => onUpdate({ sample: { ...sample, decay: v } })}
               label="Decay"
               formatValue={v => `${v}%`}
             />
@@ -353,9 +354,9 @@ export function TrackSettings({ track, onUpdate, installedPacks = [], resolution
           {fxBlock}
           {humanizeBlock}
         </>
-      )}
+      ); })()}
 
-      {track.type === 'drum-machine' && track.drumMachine && (
+      {track.type === 'drum-machine' && (
         <>
           <KnobPair>
             <Knob

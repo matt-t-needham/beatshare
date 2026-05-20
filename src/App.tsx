@@ -10,7 +10,10 @@ import { exportMidi } from './midi-export';
 import { getInstalledPacks, hasSample } from './sound-pack-store';
 import { SPIN_PACK_ID, fetchMissingSamples } from './spin';
 import { transposeAllTracks } from './scales';
-import type { InstalledPack, MusicalKey, ScaleType } from './types';
+import type { InstalledPack, MusicalKey, ScaleType, Song } from './types';
+import { ticksPerMeasure } from './types';
+import { errorMessage } from './util/error';
+import { useMount } from './hooks/useMount';
 
 function App() {
   const store = useSongStore();
@@ -28,7 +31,7 @@ function App() {
   const [zoom, setZoom] = useState(1); // 0.5, 0.75, 1, 1.25, 1.5
 
   // Load from URL hash on mount
-  useEffect(() => {
+  useMount(() => {
     const loaded = loadFromHash();
     if (loaded) {
       store.loadSong(loaded);
@@ -37,18 +40,17 @@ function App() {
       // Check for missing samples
       checkMissingSamples(loaded);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  });
 
-  async function checkMissingSamples(loadedSong: typeof song) {
+  async function checkMissingSamples(loadedSong: Song) {
     const needed = new Set<string>();
     for (const track of loadedSong.tracks) {
-      if (track.type === 'sample' && track.sample?.packId === SPIN_PACK_ID) {
+      if (track.type === 'sample' && track.sample.packId === SPIN_PACK_ID) {
         if (track.sample.sampleName) needed.add(track.sample.sampleName);
         for (const step of track.steps) {
           if (step.sampleName) needed.add(step.sampleName);
         }
-      } else if (track.type === 'drum-machine' && track.drumMachine?.packId === SPIN_PACK_ID) {
+      } else if (track.type === 'drum-machine' && track.drumMachine.packId === SPIN_PACK_ID) {
         for (const lane of track.drumMachine.lanes) needed.add(lane.sampleName);
         for (const step of track.steps) {
           if (step.sampleName) needed.add(step.sampleName);
@@ -73,15 +75,15 @@ function App() {
       await fetchMissingSamples(paths, (status) => showToast(status));
       refreshPacks();
       showToast('Missing samples downloaded!');
-    } catch (err: any) {
-      showToast(`Download failed: ${err.message}`);
+    } catch (err: unknown) {
+      showToast(`Download failed: ${errorMessage(err)}`);
     }
   }
 
   // Load installed packs on mount
-  useEffect(() => {
+  useMount(() => {
     refreshPacks();
-  }, []);
+  });
 
   const refreshPacks = useCallback(() => {
     getInstalledPacks().then(setInstalledPacks).catch(() => {});
@@ -136,13 +138,13 @@ function App() {
     return () => document.removeEventListener('keydown', handleKey);
   }, [handlePlay, handleStop]);
 
-  // Re-schedule events while playing without restarting from the beginning
+  // Re-schedule events while playing without restarting from the beginning.
+  // Reads `playing` via ref so toggling Play/Stop alone does not retrigger this effect.
   useEffect(() => {
-    if (playing) {
+    if (playingRef.current) {
       updateScheduledNotes(effectiveSong());
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [song.tracks, song.bpm, song.measures, soloTrackId]);
+  }, [song.tracks, song.bpm, song.measures, soloTrackId, effectiveSong]);
 
   const handleShare = useCallback(() => {
     const url = buildShareUrl(songRef.current);
@@ -168,7 +170,7 @@ function App() {
     showToast('File saved');
   }, []);
 
-  const handleOpenFile = useCallback((loadedSong: typeof song) => {
+  const handleOpenFile = useCallback((loadedSong: Song) => {
     store.loadSong(loadedSong);
     showToast('Song loaded from file');
     checkMissingSamples(loadedSong);
@@ -177,8 +179,8 @@ function App() {
   const handleDoubleUp = useCallback(() => {
     const s = songRef.current;
     const oldMeasures = s.measures;
-    const ticksPerMeasure = 64; // 4/4 time = 64 ticks per measure
-    const totalOldTicks = oldMeasures * ticksPerMeasure;
+    const measureTicks = ticksPerMeasure(s.timeSignature);
+    const totalOldTicks = oldMeasures * measureTicks;
     const newMeasures = Math.min(oldMeasures * 2, 8);
     store.setSong({
       ...s,
@@ -188,7 +190,7 @@ function App() {
         steps: [
           ...t.steps,
           ...t.steps
-            .filter(step => step.position + totalOldTicks < newMeasures * ticksPerMeasure)
+            .filter(step => step.position + totalOldTicks < newMeasures * measureTicks)
             .map(step => ({
               ...step,
               position: step.position + totalOldTicks,

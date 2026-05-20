@@ -1,11 +1,13 @@
 import { useMemo, useRef, useEffect, useState, useCallback, type KeyboardEvent } from 'react';
 import type { Song, Track, GridResolution, InstalledPack } from '../types';
-import { ticksPerStep, midiNoteToName } from '../types';
+import { ticksPerStep, midiNoteToName, UNPITCHED_NOTE } from '../types';
 import { TrackSettings } from './TrackSettings';
 import { DrumGrid } from './DrumGrid';
 import { PianoRoll } from './PianoRoll';
 import { classifySample, friendlyName, SYNTH_COLOR } from '../sample-categories';
 import { Tooltip } from './Tooltip';
+import { IconButton } from './IconButton';
+import { useDragPaint } from '../hooks/useDragPaint';
 
 // Shared grid geometry — every row in the global grid uses these constants.
 export const STEP_CELL_W = 28;        // px at zoom 1.0
@@ -101,21 +103,21 @@ export function StepGrid({
     prevTrackIdsRef.current = currentIds;
   }, [song.tracks]);
 
-  // Drag state for paint/erase
-  const dragRef = useRef<{
-    trackId: string;
-    mode: 'paint' | 'erase';
-    note: number;
-    stepSize: number;
-    sampleName?: string;
-  } | null>(null);
-
-  // Global mouseup to end drag
-  useEffect(() => {
-    const handleMouseUp = () => { dragRef.current = null; };
-    document.addEventListener('mouseup', handleMouseUp);
-    return () => document.removeEventListener('mouseup', handleMouseUp);
-  }, []);
+  // Track-locked drag for paint/erase: drag.start/drag.enter route to onSetStep/onClearStep.
+  // dragTrackRef gates enter events so dragging across rows does not paint other tracks.
+  const dragTrackRef = useRef<string | null>(null);
+  const drag = useDragPaint<{ trackId: string; position: number; note: number; sampleName?: string }>(
+    ({ trackId, position, note, sampleName }) => onSetStep(trackId, position, note, stepSize, sampleName),
+    ({ trackId, position }) => onClearStep(trackId, position),
+  );
+  const beginDrag = useCallback((trackId: string, cell: { position: number; note: number; sampleName?: string }, isActive: boolean) => {
+    dragTrackRef.current = trackId;
+    drag.start({ trackId, ...cell }, isActive);
+  }, [drag]);
+  const dragInto = useCallback((trackId: string, cell: { position: number; note: number; sampleName?: string }) => {
+    if (dragTrackRef.current !== trackId) return;
+    drag.enter({ trackId, ...cell });
+  }, [drag]);
 
   // Single horizontal scroll viewport. The custom bottom scrollbar and this
   // viewport drive each other; guard with a flag to prevent feedback loops.
@@ -214,7 +216,6 @@ export function StepGrid({
                   cellSize={cellSize}
                   selected={track.id === selectedTrackId}
                   soloed={soloTrackId === track.id}
-                  currentCol={currentCol}
                   expanded={expandedTrackIds.has(track.id)}
                   onSelect={() => onSelectTrack(track.id)}
                   onToggleExpanded={() => toggleExpanded(track.id)}
@@ -226,25 +227,15 @@ export function StepGrid({
                   onMoveDown={idx < trackCount - 1 ? () => onMoveTrack(idx, idx + 1) : undefined}
                   onStepMouseDown={track.type === 'drum-machine' ? undefined : (col, isActive) => {
                     const position = col * stepSize;
-                    const defaultNote = track.synth ? ((track.synth.octave + 4) * 12 + 24) : 60;
-                    const brushSample = track.type === 'sample' ? track.sample?.sampleName : undefined;
-                    if (isActive) {
-                      dragRef.current = { trackId: track.id, mode: 'erase', note: defaultNote, stepSize, sampleName: brushSample };
-                      onClearStep(track.id, position);
-                    } else {
-                      dragRef.current = { trackId: track.id, mode: 'paint', note: defaultNote, stepSize, sampleName: brushSample };
-                      onSetStep(track.id, position, defaultNote, stepSize, brushSample);
-                    }
+                    const defaultNote = track.type === 'synth' ? ((track.synth.octave + 4) * 12 + 24) : UNPITCHED_NOTE;
+                    const brushSample = track.type === 'sample' ? track.sample.sampleName : undefined;
+                    beginDrag(track.id, { position, note: defaultNote, sampleName: brushSample }, isActive);
                   }}
                   onStepMouseEnter={track.type === 'drum-machine' ? undefined : (col) => {
-                    const drag = dragRef.current;
-                    if (!drag || drag.trackId !== track.id) return;
                     const position = col * stepSize;
-                    if (drag.mode === 'paint') {
-                      onSetStep(track.id, position, drag.note, drag.stepSize, drag.sampleName);
-                    } else {
-                      onClearStep(track.id, position);
-                    }
+                    const defaultNote = track.type === 'synth' ? ((track.synth.octave + 4) * 12 + 24) : UNPITCHED_NOTE;
+                    const brushSample = track.type === 'sample' ? track.sample.sampleName : undefined;
+                    dragInto(track.id, { position, note: defaultNote, sampleName: brushSample });
                   }}
                   onRename={(name) => onUpdateTrack(track.id, { name })}
                 />
@@ -263,7 +254,6 @@ export function StepGrid({
                         track={track}
                         resolution={resolution}
                         measures={song.measures}
-                        currentCol={currentCol}
                         onSetDrumStep={onSetDrumStep}
                         onClearDrumStep={onClearDrumStep}
                         onUpdateTrack={(updates) => onUpdateTrack(track.id, updates)}
@@ -280,7 +270,6 @@ export function StepGrid({
                       songScale={song.scale}
                       resolution={resolution}
                       measures={song.measures}
-                      currentCol={currentCol}
                       onSetStep={(trackId, position, note, duration) => onSetStep(trackId, position, note, duration)}
                       onClearStep={onClearStep}
                       zoom={zoom}
@@ -327,7 +316,6 @@ interface TrackRowProps {
   cellSize: number;
   selected: boolean;
   soloed: boolean;
-  currentCol: number | null;
   expanded: boolean;
   onSelect: () => void;
   onToggleExpanded: () => void;
@@ -351,7 +339,6 @@ function TrackRow({
   cellSize,
   selected,
   soloed,
-  currentCol,
   expanded,
   onSelect,
   onToggleExpanded,
@@ -399,16 +386,17 @@ function TrackRow({
     return map;
   }, [track.steps, stepSize]);
 
+  const sampleBrushName = track.type === 'sample' ? track.sample.sampleName : null;
   const trackColor = useMemo(() => {
-    if (track.type === 'sample' && track.sample?.sampleName) {
-      const cat = classifySample(track.sample.sampleName);
+    if (sampleBrushName) {
+      const cat = classifySample(sampleBrushName);
       return { color: cat.color, hoverColor: cat.hoverColor };
     }
     if (track.type === 'drum-machine') {
       return { color: '#8855cc', hoverColor: '#9966dd' };
     }
     return SYNTH_COLOR;
-  }, [track.type, track.sample?.sampleName]);
+  }, [track.type, sampleBrushName]);
 
   const typeLabel = trackTypeLabel(track);
   const rowBg = selected ? 'bg-zinc-800/70' : 'hover:bg-zinc-800/30';
@@ -463,45 +451,39 @@ function TrackRow({
               {track.name}
             </span>
           )}
-          <Tooltip text={track.muted ? 'Unmute' : 'Mute'}>
-            <button
-              onClick={e => { e.stopPropagation(); onMute(); }}
-              className={`w-5 h-5 rounded cursor-pointer flex items-center justify-center text-[10px] font-bold border shrink-0 ${
-                track.muted ? 'bg-yellow-600 text-white border-yellow-500' : 'bg-zinc-700 text-zinc-300 hover:bg-zinc-600 border-zinc-600'
-              }`}
-            >
-              M
-            </button>
-          </Tooltip>
-          <Tooltip text={soloed ? 'Un-solo' : 'Solo'}>
-            <button
-              onClick={e => { e.stopPropagation(); onSolo(); }}
-              className={`w-5 h-5 rounded cursor-pointer flex items-center justify-center text-[10px] font-bold border shrink-0 ${
-                soloed ? 'bg-blue-600 text-white border-blue-500' : 'bg-zinc-700 text-zinc-300 hover:bg-zinc-600 border-zinc-600'
-              }`}
-            >
-              S
-            </button>
-          </Tooltip>
-          <Tooltip text="Clone track">
-            <button
-              onClick={e => { e.stopPropagation(); onClone(); }}
-              className="w-5 h-5 rounded bg-zinc-700 text-zinc-300 hover:bg-purple-600 hover:text-white cursor-pointer flex items-center justify-center border border-zinc-600 shrink-0"
-            >
-              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
-                <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" />
-              </svg>
-            </button>
-          </Tooltip>
-          <Tooltip text="Remove track">
-            <button
-              onClick={e => { e.stopPropagation(); onRemove(); }}
-              className="w-5 h-5 rounded bg-zinc-700 text-zinc-300 hover:bg-red-700 hover:text-white cursor-pointer flex items-center justify-center text-xs leading-none border border-zinc-600 shrink-0"
-            >
-              ×
-            </button>
-          </Tooltip>
+          <IconButton
+            tooltip={track.muted ? 'Unmute' : 'Mute'}
+            variant="mute"
+            active={track.muted}
+            onClick={e => { e.stopPropagation(); onMute(); }}
+          >
+            M
+          </IconButton>
+          <IconButton
+            tooltip={soloed ? 'Un-solo' : 'Solo'}
+            variant="solo"
+            active={soloed}
+            onClick={e => { e.stopPropagation(); onSolo(); }}
+          >
+            S
+          </IconButton>
+          <IconButton
+            tooltip="Clone track"
+            variant="action"
+            onClick={e => { e.stopPropagation(); onClone(); }}
+          >
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+              <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" />
+            </svg>
+          </IconButton>
+          <IconButton
+            tooltip="Remove track"
+            variant="danger"
+            onClick={e => { e.stopPropagation(); onRemove(); }}
+          >
+            ×
+          </IconButton>
           <div className="flex flex-col gap-px shrink-0">
             <Tooltip text="Move up">
               <button

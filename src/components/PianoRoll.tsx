@@ -1,8 +1,9 @@
-import { useMemo, useRef, useEffect, useCallback } from 'react';
+import { useMemo } from 'react';
 import type { Track, MusicalKey, ScaleType, GridResolution } from '../types';
 import { ticksPerStep, midiNoteToName } from '../types';
 import { getScaleNotes, getCenteredScaleNotes } from '../scales';
 import { STEP_CELL_W, STICKY_COL_W, CONTROLS_W, ROW_LABEL_W, CELL_GAP } from './StepGrid';
+import { useDragPaint } from '../hooks/useDragPaint';
 
 interface PianoRollProps {
   track: Track;
@@ -10,7 +11,6 @@ interface PianoRollProps {
   songScale: ScaleType;
   resolution: GridResolution;
   measures: number;
-  currentCol: number | null;
   onSetStep: (trackId: string, position: number, note: number, duration: number) => void;
   onClearStep: (trackId: string, position: number) => void;
   zoom?: number;
@@ -24,7 +24,6 @@ export function PianoRoll({
   songScale,
   resolution,
   measures,
-  // currentCol unused — global playhead overlay handles indication
   onSetStep,
   onClearStep,
   zoom = 1,
@@ -35,7 +34,7 @@ export function PianoRoll({
   const totalSteps = resolution * measures;
   const stepsPerBeat = resolution / 4;
 
-  const octave = compact ? 4 : (track.synth?.octave ?? 0) + 4;
+  const octave = track.type === 'synth' ? track.synth.octave + 4 : 4;
   const scaleNotes = useMemo(
     () => compact
       ? getCenteredScaleNotes(songKey, songScale, octave, 4, 4)
@@ -53,35 +52,10 @@ export function PianoRoll({
     return map;
   }, [track.steps]);
 
-  const dragRef = useRef<{ mode: 'paint' | 'erase'; note: number } | null>(null);
-
-  useEffect(() => {
-    const handleMouseUp = () => { dragRef.current = null; };
-    document.addEventListener('mouseup', handleMouseUp);
-    return () => document.removeEventListener('mouseup', handleMouseUp);
-  }, []);
-
-  const handleMouseDown = useCallback((col: number, note: number, isActive: boolean) => {
-    const position = col * stepSize;
-    if (isActive) {
-      dragRef.current = { mode: 'erase', note };
-      onClearStep(track.id, position);
-    } else {
-      dragRef.current = { mode: 'paint', note };
-      onSetStep(track.id, position, note, stepSize);
-    }
-  }, [track.id, stepSize, onSetStep, onClearStep]);
-
-  const handleMouseEnter = useCallback((col: number, note: number) => {
-    const drag = dragRef.current;
-    if (!drag) return;
-    const position = col * stepSize;
-    if (drag.mode === 'paint') {
-      onSetStep(track.id, position, note, stepSize);
-    } else {
-      onClearStep(track.id, position);
-    }
-  }, [track.id, stepSize, onSetStep, onClearStep]);
+  const drag = useDragPaint<{ col: number; note: number }>(
+    ({ col, note }) => onSetStep(track.id, col * stepSize, note, stepSize),
+    ({ col }) => onClearStep(track.id, col * stepSize),
+  );
 
   const cellW = Math.round(STEP_CELL_W * zoom);
   const cellH = Math.round(STEP_CELL_W * zoom);
@@ -126,9 +100,9 @@ export function PianoRoll({
                   onMouseDown={e => {
                     e.preventDefault();
                     e.stopPropagation();
-                    handleMouseDown(col, note, isActive);
+                    drag.start({ col, note }, isActive);
                   }}
-                  onMouseEnter={() => handleMouseEnter(col, note)}
+                  onMouseEnter={() => drag.enter({ col, note })}
                   style={{ width: cellW, height: cellH }}
                   className={`
                     shrink-0 rounded-sm cursor-pointer transition-colors

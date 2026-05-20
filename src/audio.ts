@@ -1,5 +1,6 @@
 import * as Tone from 'tone';
-import type { Song, Track, EffectConfig } from './types';
+import type { Song, SynthTrack, EffectConfig } from './types';
+import { TICKS_PER_BEAT, TRACK_DEFAULTS, UNPITCHED_NOTE, ticksPerMeasure } from './types';
 import { getSample } from './sound-pack-store';
 import { KEY_ROOTS } from './scales';
 
@@ -42,10 +43,16 @@ function decayToEnvelope(decay: number): { attack: number; decay: number; sustai
 
 // --- Per-track audio chain: gain -> effect -> destination ---
 const trackGains = new Map<string, Tone.Gain>();
+// `node` is typed as a generic audio node, but every effect we create exposes
+// a `wet` Tone.Signal — see updateEffectWet below.
 const trackEffects = new Map<string, { id: string; node: Tone.ToneAudioNode }>();
 
+function hasWet(node: Tone.ToneAudioNode): node is Tone.ToneAudioNode & { wet: Tone.Signal<'normalRange'> } {
+  return 'wet' in node;
+}
+
 function createEffectNode(config: EffectConfig): Tone.ToneAudioNode | null {
-  const wet = config.wet ?? 0.5;
+  const wet = config.wet ?? TRACK_DEFAULTS.effectWet;
   switch (config.id) {
     case 'reverb': {
       const fx = new Tone.Reverb({ decay: 2.5, preDelay: 0.01 });
@@ -150,22 +157,21 @@ function getTrackOutput(trackId: string, volume: number, muted: boolean, effect?
     }
   } else if (currentEffect && effect) {
     // Same effect, update wet
-    const node = currentEffect.node as any;
-    if (node.wet) {
-      node.wet.value = effect.wet ?? 0.5;
+    if (hasWet(currentEffect.node)) {
+      currentEffect.node.wet.value = effect.wet ?? TRACK_DEFAULTS.effectWet;
     }
   }
 
   return gain;
 }
 
-function getSynth(track: Track): Tone.Synth {
-  const envelope = decayToEnvelope(track.synth?.decay ?? 50);
+function getSynth(track: SynthTrack): Tone.Synth {
+  const envelope = decayToEnvelope(track.synth.decay ?? TRACK_DEFAULTS.synthDecay);
   const output = getTrackOutput(track.id, 1, false, track.effect);
   let synth = synths.get(track.id);
   if (!synth) {
     synth = new Tone.Synth({
-      oscillator: { type: track.synth?.waveform ?? 'sawtooth' },
+      oscillator: { type: track.synth.waveform },
       envelope,
     });
     synth.connect(output);
@@ -175,9 +181,7 @@ function getSynth(track: Track): Tone.Synth {
     synth.disconnect();
     synth.connect(output);
   }
-  if (track.synth) {
-    synth.oscillator.type = track.synth.waveform;
-  }
+  synth.oscillator.type = track.synth.waveform;
   synth.set({ envelope });
   synth.volume.value = track.muted ? -Infinity : Tone.gainToDb(track.volume);
   return synth;
@@ -217,9 +221,9 @@ async function loadSampleBuffer(packId: string, sampleName: string): Promise<Ton
 }
 
 export async function preloadSamples(song: Song): Promise<void> {
-  const promises: Promise<any>[] = [];
+  const promises: Promise<unknown>[] = [];
   for (const track of song.tracks) {
-    if (track.type === 'sample' && track.sample?.packId) {
+    if (track.type === 'sample' && track.sample.packId) {
       // Collect all unique sample names from steps + the track-level brush
       const names = new Set<string>();
       if (track.sample.sampleName) names.add(track.sample.sampleName);
@@ -229,7 +233,7 @@ export async function preloadSamples(song: Song): Promise<void> {
       for (const name of names) {
         promises.push(loadSampleBuffer(track.sample.packId, name));
       }
-    } else if (track.type === 'drum-machine' && track.drumMachine?.packId) {
+    } else if (track.type === 'drum-machine' && track.drumMachine.packId) {
       const names = new Set<string>();
       for (const lane of track.drumMachine.lanes) {
         names.add(lane.sampleName);
@@ -264,11 +268,11 @@ export function getMetronome(): boolean {
 
 /**
  * Convert our 64th-note tick position to seconds at a given BPM.
- * 1 quarter note = 16 ticks. At BPM beats per minute:
- * seconds per tick = 60 / (BPM * 16)
+ * 1 quarter note = TICKS_PER_BEAT ticks. At BPM beats per minute:
+ * seconds per tick = 60 / (BPM * TICKS_PER_BEAT)
  */
 function ticksToSeconds(ticks: number, bpm: number): number {
-  return ticks * (60 / (bpm * 16));
+  return ticks * (60 / (bpm * TICKS_PER_BEAT));
 }
 
 /**
@@ -281,7 +285,8 @@ function scheduleAllEvents(song: Song) {
   scheduledEvents = [];
 
   const bpm = song.bpm;
-  const totalTicks = 64 * song.measures;
+  const measureTicks = ticksPerMeasure(song.timeSignature);
+  const totalTicks = measureTicks * song.measures;
   const totalSeconds = ticksToSeconds(totalTicks, bpm);
 
   // Schedule each track's steps
@@ -300,23 +305,23 @@ function scheduleAllEvents(song: Song) {
         }, startTime);
         scheduledEvents.push(eventId);
       }
-    } else if (track.type === 'sample' && track.sample?.packId) {
+    } else if (track.type === 'sample' && track.sample.packId) {
       const packId = track.sample.packId;
       const gain = getTrackOutput(track.id, track.volume, track.muted, track.effect);
       for (const step of track.steps) {
         if (step.position >= totalTicks) continue;
-        const stepSample = step.sampleName ?? track.sample?.sampleName;
+        const stepSample = step.sampleName ?? track.sample.sampleName;
         if (!stepSample) continue;
         const buffer = sampleBufferCache.get(sampleKey(packId, stepSample));
         if (!buffer) continue;
         const startTime = ticksToSeconds(step.position, bpm);
-        const trackPitchShift = track.sample?.pitchShift ?? 0;
-        // Per-step pitch: if step note differs from default (60), it was placed via piano roll
-        // Shift in semitones relative to song root at octave 4
-        const rootMidi = 60 + KEY_ROOTS[song.key];
-        const noteSemitones = step.note !== 60 ? (step.note - rootMidi) : 0;
+        const trackPitchShift = track.sample.pitchShift ?? TRACK_DEFAULTS.samplePitchShift;
+        // Per-step pitch: if step note is the UNPITCHED_NOTE sentinel, it was grid-placed
+        // (no pitch override). Otherwise shift in semitones relative to song root at octave 4.
+        const rootMidi = UNPITCHED_NOTE + KEY_ROOTS[song.key];
+        const noteSemitones = step.note !== UNPITCHED_NOTE ? (step.note - rootMidi) : 0;
         const playbackRate = Math.pow(2, trackPitchShift + noteSemitones / 12);
-        const sampleDecay = track.sample?.decay ?? 100;
+        const sampleDecay = track.sample.decay ?? TRACK_DEFAULTS.sampleDecay;
         const eventId = Tone.getTransport().schedule((time) => {
           const source = new Tone.ToneBufferSource(buffer).connect(gain);
           source.playbackRate.value = playbackRate;
@@ -330,7 +335,7 @@ function scheduleAllEvents(song: Song) {
         }, startTime);
         scheduledEvents.push(eventId);
       }
-    } else if (track.type === 'drum-machine' && track.drumMachine?.packId) {
+    } else if (track.type === 'drum-machine' && track.drumMachine.packId) {
       const packId = track.drumMachine.packId;
       const gain = getTrackOutput(track.id, track.volume, track.muted, track.effect);
       // Build a per-lane volume lookup and mute set
@@ -370,10 +375,9 @@ function scheduleAllEvents(song: Song) {
       }).toDestination();
       metronomeSynth.volume.value = -6;
     }
-    const ticksPerBeat = 16;
-    for (let tick = 0; tick < totalTicks; tick += ticksPerBeat) {
+    for (let tick = 0; tick < totalTicks; tick += TICKS_PER_BEAT) {
       const time = ticksToSeconds(tick, bpm);
-      const isDownbeat = tick % 64 === 0;
+      const isDownbeat = tick % measureTicks === 0;
       const freq = isDownbeat ? 1000 : 800;
       const eventId = Tone.getTransport().schedule((t) => {
         metronomeSynth!.triggerAttackRelease(freq, 0.03, t, isDownbeat ? 0.8 : 0.5);

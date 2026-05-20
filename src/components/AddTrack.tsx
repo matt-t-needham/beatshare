@@ -1,4 +1,5 @@
 import type { Track, InstalledPack } from '../types';
+import { newSynthTrack, newSampleTrack, newDrumTrack } from '../types';
 import { groupSamplesByCategory } from '../sample-categories';
 import { Tooltip } from './Tooltip';
 
@@ -12,30 +13,14 @@ export function AddTrack({ onAdd, trackCount, installedPacks }: AddTrackProps) {
   const defaultPack = installedPacks[0] || null;
 
   const addSynth = () => {
-    const track: Track = {
-      id: crypto.randomUUID(),
-      name: `Synth ${trackCount + 1}`,
-      type: 'synth',
-      synth: { waveform: 'sawtooth', octave: 0 },
-      volume: 0.7,
-      muted: false,
-      steps: [],
-    };
-    onAdd(track);
+    onAdd(newSynthTrack({ name: `Synth ${trackCount + 1}` }));
   };
 
   const addSampleWithPack = (pack: InstalledPack) => {
     const firstSample = pack.sampleNames[0] || '';
-    const track: Track = {
-      id: crypto.randomUUID(),
+    onAdd(newSampleTrack(pack.id, firstSample, {
       name: `${pack.name.substring(0, 12)} ${trackCount + 1}`,
-      type: 'sample',
-      sample: { packId: pack.id, sampleName: firstSample },
-      volume: 0.7,
-      muted: false,
-      steps: [],
-    };
-    onAdd(track);
+    }));
   };
 
   const addDrumMachineWithPack = (pack: InstalledPack) => {
@@ -46,16 +31,7 @@ export function AddTrack({ onAdd, trackCount, installedPacks }: AddTrackProps) {
       volume: 1,
       muted: false,
     }));
-    const track: Track = {
-      id: crypto.randomUUID(),
-      name: `Drums ${trackCount + 1}`,
-      type: 'drum-machine',
-      drumMachine: { packId: pack.id, lanes },
-      volume: 0.7,
-      muted: false,
-      steps: [],
-    };
-    onAdd(track);
+    onAdd(newDrumTrack(pack.id, lanes, { name: `Drums ${trackCount + 1}` }));
   };
 
   return (

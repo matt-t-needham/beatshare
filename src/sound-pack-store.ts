@@ -9,8 +9,11 @@ export interface TreeEntry {
   size: number;
 }
 
-function openDB(): Promise<IDBDatabase> {
-  return new Promise((resolve, reject) => {
+let dbPromise: Promise<IDBDatabase> | null = null;
+
+function getDB(): Promise<IDBDatabase> {
+  if (dbPromise) return dbPromise;
+  dbPromise = new Promise((resolve, reject) => {
     const req = indexedDB.open(DB_NAME, DB_VERSION);
     req.onupgradeneeded = () => {
       const db = req.result;
@@ -26,33 +29,53 @@ function openDB(): Promise<IDBDatabase> {
       }
     };
     req.onsuccess = () => resolve(req.result);
+    req.onerror = () => {
+      dbPromise = null;
+      reject(req.error);
+    };
+  });
+  return dbPromise;
+}
+
+function reqToPromise<T>(req: IDBRequest<T>): Promise<T> {
+  return new Promise((resolve, reject) => {
+    req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error);
   });
+}
+
+async function withTx<T>(
+  stores: string | string[],
+  mode: IDBTransactionMode,
+  fn: (tx: IDBTransaction) => T | Promise<T>,
+): Promise<T> {
+  const db = await getDB();
+  const tx = db.transaction(stores, mode);
+  const txDone = new Promise<void>((resolve, reject) => {
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+    tx.onabort = () => reject(tx.error);
+  });
+  const result = await fn(tx);
+  await txDone;
+  return result;
 }
 
 export async function savePack(
   entry: SoundPackEntry,
   samples: Map<string, ArrayBuffer>,
 ): Promise<void> {
-  const db = await openDB();
-  const tx = db.transaction(['packs', 'samples'], 'readwrite');
-
-  const packStore = tx.objectStore('packs');
-  packStore.put({
-    id: entry.id,
-    name: entry.name,
-    description: entry.description,
-    license: entry.license,
-  });
-
-  const sampleStore = tx.objectStore('samples');
-  for (const [name, data] of samples) {
-    sampleStore.put({ packId: entry.id, name, data });
-  }
-
-  return new Promise((resolve, reject) => {
-    tx.oncomplete = () => { db.close(); resolve(); };
-    tx.onerror = () => { db.close(); reject(tx.error); };
+  await withTx(['packs', 'samples'], 'readwrite', tx => {
+    tx.objectStore('packs').put({
+      id: entry.id,
+      name: entry.name,
+      description: entry.description,
+      license: entry.license,
+    });
+    const sampleStore = tx.objectStore('samples');
+    for (const [name, data] of samples) {
+      sampleStore.put({ packId: entry.id, name, data });
+    }
   });
 }
 
@@ -62,156 +85,108 @@ export async function addSamples(
   packMeta: { name: string; description: string; license: string },
   samples: Map<string, ArrayBuffer>,
 ): Promise<void> {
-  const db = await openDB();
-  const tx = db.transaction(['packs', 'samples'], 'readwrite');
-
-  // Ensure pack metadata exists
-  tx.objectStore('packs').put({ id: packId, ...packMeta });
-
-  const sampleStore = tx.objectStore('samples');
-  for (const [name, data] of samples) {
-    sampleStore.put({ packId, name, data });
-  }
-
-  return new Promise((resolve, reject) => {
-    tx.oncomplete = () => { db.close(); resolve(); };
-    tx.onerror = () => { db.close(); reject(tx.error); };
+  await withTx(['packs', 'samples'], 'readwrite', tx => {
+    tx.objectStore('packs').put({ id: packId, ...packMeta });
+    const sampleStore = tx.objectStore('samples');
+    for (const [name, data] of samples) {
+      sampleStore.put({ packId, name, data });
+    }
   });
 }
 
 /** Remove a single sample from a pack */
 export async function removeSample(packId: string, sampleName: string): Promise<void> {
-  const db = await openDB();
-  const tx = db.transaction('samples', 'readwrite');
-  tx.objectStore('samples').delete([packId, sampleName]);
-
-  return new Promise((resolve, reject) => {
-    tx.oncomplete = () => { db.close(); resolve(); };
-    tx.onerror = () => { db.close(); reject(tx.error); };
+  await withTx('samples', 'readwrite', tx => {
+    tx.objectStore('samples').delete([packId, sampleName]);
   });
 }
 
 export async function getInstalledPacks(): Promise<InstalledPack[]> {
-  const db = await openDB();
-  const tx = db.transaction(['packs', 'samples'], 'readonly');
+  return withTx(['packs', 'samples'], 'readonly', async tx => {
+    const packs = await reqToPromise<Array<{ id: string; name: string; description: string; license: string }>>(
+      tx.objectStore('packs').getAll(),
+    );
 
-  const packs: any[] = await new Promise((resolve, reject) => {
-    const req = tx.objectStore('packs').getAll();
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error);
+    const result: InstalledPack[] = [];
+    for (const pack of packs) {
+      const keys = await reqToPromise<IDBValidKey[]>(
+        tx.objectStore('samples').index('byPack').getAllKeys(pack.id),
+      );
+      const sampleNames = keys.map(k => (k as [string, string])[1]);
+      result.push({
+        id: pack.id,
+        name: pack.name,
+        description: pack.description,
+        license: pack.license,
+        sampleNames,
+      });
+    }
+    return result;
   });
-
-  const result: InstalledPack[] = [];
-  for (const pack of packs) {
-    const sampleNames: string[] = await new Promise((resolve, reject) => {
-      const idx = tx.objectStore('samples').index('byPack');
-      const req = idx.getAllKeys(pack.id);
-      req.onsuccess = () => resolve(req.result.map((k: any) => k[1]));
-      req.onerror = () => reject(req.error);
-    });
-    result.push({
-      id: pack.id,
-      name: pack.name,
-      description: pack.description,
-      license: pack.license,
-      sampleNames,
-    });
-  }
-
-  db.close();
-  return result;
 }
 
 export async function getPackSamples(packId: string): Promise<string[]> {
-  const db = await openDB();
-  const tx = db.transaction('samples', 'readonly');
-  const idx = tx.objectStore('samples').index('byPack');
-
-  return new Promise((resolve, reject) => {
-    const req = idx.getAllKeys(packId);
-    req.onsuccess = () => {
-      db.close();
-      resolve(req.result.map((k: any) => k[1]));
-    };
-    req.onerror = () => { db.close(); reject(req.error); };
+  return withTx('samples', 'readonly', async tx => {
+    const keys = await reqToPromise<IDBValidKey[]>(
+      tx.objectStore('samples').index('byPack').getAllKeys(packId),
+    );
+    return keys.map(k => (k as [string, string])[1]);
   });
 }
 
 export async function getSample(packId: string, sampleName: string): Promise<ArrayBuffer> {
-  const db = await openDB();
-  const tx = db.transaction('samples', 'readonly');
-  const store = tx.objectStore('samples');
-
-  return new Promise((resolve, reject) => {
-    const req = store.get([packId, sampleName]);
-    req.onsuccess = () => {
-      db.close();
-      if (!req.result) reject(new Error(`Sample not found: ${packId}/${sampleName}`));
-      else resolve(req.result.data);
-    };
-    req.onerror = () => { db.close(); reject(req.error); };
+  return withTx('samples', 'readonly', async tx => {
+    const row = await reqToPromise<{ data: ArrayBuffer } | undefined>(
+      tx.objectStore('samples').get([packId, sampleName]),
+    );
+    if (!row) throw new Error(`Sample not found: ${packId}/${sampleName}`);
+    return row.data;
   });
 }
 
 /** Check if a sample exists in the store */
 export async function hasSample(packId: string, sampleName: string): Promise<boolean> {
-  const db = await openDB();
-  const tx = db.transaction('samples', 'readonly');
-  const store = tx.objectStore('samples');
-
-  return new Promise((resolve) => {
-    const req = store.getKey([packId, sampleName]);
-    req.onsuccess = () => { db.close(); resolve(!!req.result); };
-    req.onerror = () => { db.close(); resolve(false); };
-  });
+  try {
+    return await withTx('samples', 'readonly', async tx => {
+      const key = await reqToPromise<IDBValidKey | undefined>(
+        tx.objectStore('samples').getKey([packId, sampleName]),
+      );
+      return key !== undefined;
+    });
+  } catch {
+    return false;
+  }
 }
 
 export async function removePack(packId: string): Promise<void> {
-  const db = await openDB();
-  const tx = db.transaction(['packs', 'samples'], 'readwrite');
-
-  tx.objectStore('packs').delete(packId);
-
-  // Delete all samples for this pack
-  const idx = tx.objectStore('samples').index('byPack');
-  const keys: IDBValidKey[] = await new Promise((resolve, reject) => {
-    const req = idx.getAllKeys(packId);
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error);
-  });
-  for (const key of keys) {
-    tx.objectStore('samples').delete(key);
-  }
-
-  return new Promise((resolve, reject) => {
-    tx.oncomplete = () => { db.close(); resolve(); };
-    tx.onerror = () => { db.close(); reject(tx.error); };
+  await withTx(['packs', 'samples'], 'readwrite', async tx => {
+    tx.objectStore('packs').delete(packId);
+    const keys = await reqToPromise<IDBValidKey[]>(
+      tx.objectStore('samples').index('byPack').getAllKeys(packId),
+    );
+    for (const key of keys) {
+      tx.objectStore('samples').delete(key);
+    }
   });
 }
 
 // --- GitHub tree cache ---
 
 export async function saveTreeCache(repoKey: string, tree: TreeEntry[]): Promise<void> {
-  const db = await openDB();
-  const tx = db.transaction('github-trees', 'readwrite');
-  tx.objectStore('github-trees').put({ repoKey, tree, fetchedAt: Date.now() });
-
-  return new Promise((resolve, reject) => {
-    tx.oncomplete = () => { db.close(); resolve(); };
-    tx.onerror = () => { db.close(); reject(tx.error); };
+  await withTx('github-trees', 'readwrite', tx => {
+    tx.objectStore('github-trees').put({ repoKey, tree, fetchedAt: Date.now() });
   });
 }
 
 export async function getTreeCache(repoKey: string): Promise<{ tree: TreeEntry[]; fetchedAt: number } | null> {
-  const db = await openDB();
-  const tx = db.transaction('github-trees', 'readonly');
-
-  return new Promise((resolve) => {
-    const req = tx.objectStore('github-trees').get(repoKey);
-    req.onsuccess = () => {
-      db.close();
-      resolve(req.result ? { tree: req.result.tree, fetchedAt: req.result.fetchedAt } : null);
-    };
-    req.onerror = () => { db.close(); resolve(null); };
-  });
+  try {
+    return await withTx('github-trees', 'readonly', async tx => {
+      const row = await reqToPromise<{ tree: TreeEntry[]; fetchedAt: number } | undefined>(
+        tx.objectStore('github-trees').get(repoKey),
+      );
+      return row ? { tree: row.tree, fetchedAt: row.fetchedAt } : null;
+    });
+  } catch {
+    return null;
+  }
 }

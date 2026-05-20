@@ -105,10 +105,12 @@ describe('loadFromHash', () => {
     window.location.hash = `#${url.split('#')[1]}`;
     const loaded = loadFromHash()!;
 
-    expect(loaded.tracks[0].synth?.waveform).toBe('triangle');
-    expect(loaded.tracks[0].synth?.octave).toBe(5);
-    expect(loaded.tracks[0].volume).toBe(0.3);
-    expect(loaded.tracks[0].muted).toBe(true);
+    const synthTrack = loaded.tracks[0];
+    if (synthTrack.type !== 'synth') throw new Error('expected synth track');
+    expect(synthTrack.synth.waveform).toBe('triangle');
+    expect(synthTrack.synth.octave).toBe(5);
+    expect(synthTrack.volume).toBe(0.3);
+    expect(synthTrack.muted).toBe(true);
   });
 });
 

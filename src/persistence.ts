@@ -1,5 +1,6 @@
 import LZString from 'lz-string';
-import type { Song, Track, Step, MusicalKey, ScaleType } from './types';
+import type { Song, Track, Step, Waveform, MusicalKey, ScaleType } from './types';
+import { TRACK_DEFAULTS, newSynthTrack, newSampleTrack, newDrumTrack } from './types';
 
 // Minified key mapping for URL compactness
 interface SerializedSong {
@@ -54,18 +55,96 @@ export function serialize(song: Song): SerializedSong {
     m: song.measures,
     ...(song.key && song.key !== 'C' ? { k: song.key } : {}),
     ...(song.scale && song.scale !== 'major' ? { sc: song.scale } : {}),
-    t: song.tracks.map(t => ({
-      n: t.name,
-      ty: t.type,
-      ...(t.synth ? { w: t.synth.waveform, o: t.synth.octave, ...(t.synth.decay != null && t.synth.decay !== 50 ? { dc: t.synth.decay } : {}) } : {}),
-      ...(t.sample ? { pk: t.sample.packId, sn: t.sample.sampleName, ...(t.sample.pitchShift ? { ps: t.sample.pitchShift } : {}), ...(t.sample.decay != null && t.sample.decay !== 100 ? { sd: t.sample.decay } : {}) } : {}),
-      ...(t.drumMachine ? { dm: { pk: t.drumMachine.packId, ln: t.drumMachine.lanes.map(l => ({ sn: l.sampleName, v: l.volume, mu: l.muted })) } } : {}),
-      v: t.volume,
-      mu: t.muted,
-      ...(t.effect ? { fx: t.effect.id, ...(t.effect.wet != null && t.effect.wet !== 0.5 ? { fw: t.effect.wet } : {}) } : {}),
-      s: t.steps.map(s => ({ p: s.position, nt: s.note, vl: s.velocity, d: s.duration, ...(s.sampleName ? { sm: s.sampleName } : {}) })),
-    })),
+    t: song.tracks.map(t => {
+      const base = {
+        n: t.name,
+        ty: t.type,
+        v: t.volume,
+        mu: t.muted,
+        ...(t.effect ? { fx: t.effect.id, ...(t.effect.wet != null && t.effect.wet !== TRACK_DEFAULTS.effectWet ? { fw: t.effect.wet } : {}) } : {}),
+        s: t.steps.map(s => ({ p: s.position, nt: s.note, vl: s.velocity, d: s.duration, ...(s.sampleName ? { sm: s.sampleName } : {}) })),
+      };
+      if (t.type === 'synth') {
+        return {
+          ...base,
+          w: t.synth.waveform,
+          o: t.synth.octave,
+          ...(t.synth.decay != null && t.synth.decay !== TRACK_DEFAULTS.synthDecay ? { dc: t.synth.decay } : {}),
+        };
+      }
+      if (t.type === 'sample') {
+        return {
+          ...base,
+          pk: t.sample.packId,
+          sn: t.sample.sampleName,
+          ...(t.sample.pitchShift ? { ps: t.sample.pitchShift } : {}),
+          ...(t.sample.decay != null && t.sample.decay !== TRACK_DEFAULTS.sampleDecay ? { sd: t.sample.decay } : {}),
+        };
+      }
+      return {
+        ...base,
+        dm: {
+          pk: t.drumMachine.packId,
+          ln: t.drumMachine.lanes.map(l => ({ sn: l.sampleName, v: l.volume, mu: l.muted })),
+        },
+      };
+    }),
   };
+}
+
+function deserializeSteps(s: SerializedStep[] | undefined): Step[] {
+  return (s ?? []).map(step => ({
+    position: step.p,
+    note: step.nt,
+    velocity: step.vl,
+    duration: step.d,
+    ...(step.sm ? { sampleName: step.sm } : {}),
+  }));
+}
+
+function deserializeEffect(t: SerializedTrack) {
+  return t.fx
+    ? { effect: { id: t.fx, ...(t.fw != null ? { wet: t.fw } : {}) } }
+    : {};
+}
+
+function deserializeTrack(t: SerializedTrack): Track {
+  const common = {
+    name: t.n || 'Track',
+    volume: t.v ?? TRACK_DEFAULTS.volume,
+    muted: t.mu || false,
+    steps: deserializeSteps(t.s),
+    ...deserializeEffect(t),
+  };
+
+  if (t.ty === 'sample') {
+    return newSampleTrack(t.pk || '', t.sn || '', {
+      ...common,
+      sample: {
+        packId: t.pk || '',
+        sampleName: t.sn || '',
+        ...(t.ps ? { pitchShift: t.ps } : {}),
+        ...(t.sd != null ? { decay: t.sd } : {}),
+      },
+    });
+  }
+
+  if (t.ty === 'drum-machine' && t.dm) {
+    return newDrumTrack(
+      t.dm.pk,
+      t.dm.ln.map(l => ({ sampleName: l.sn, volume: l.v, muted: l.mu })),
+      common,
+    );
+  }
+
+  return newSynthTrack({
+    ...common,
+    synth: {
+      waveform: (t.w as Waveform) || TRACK_DEFAULTS.waveform,
+      octave: t.o ?? TRACK_DEFAULTS.synthOctave,
+      ...(t.dc != null ? { decay: t.dc } : {}),
+    },
+  });
 }
 
 export function deserialize(data: SerializedSong): Song {
@@ -77,24 +156,7 @@ export function deserialize(data: SerializedSong): Song {
     measures: data.m || 1,
     key: (data.k as MusicalKey) || 'C',
     scale: (data.sc as ScaleType) || 'major',
-    tracks: (data.t || []).map((t): Track => ({
-      id: crypto.randomUUID(),
-      name: t.n || 'Track',
-      type: t.ty || 'synth',
-      ...(t.ty === 'synth' ? { synth: { waveform: (t.w as any) || 'sawtooth', octave: t.o ?? 0, ...(t.dc != null ? { decay: t.dc } : {}) } } : {}),
-      ...(t.ty === 'sample' ? { sample: { packId: t.pk || '', sampleName: t.sn || '', ...(t.ps ? { pitchShift: t.ps } : {}), ...(t.sd != null ? { decay: t.sd } : {}) } } : {}),
-      ...(t.dm ? { drumMachine: { packId: t.dm.pk, lanes: t.dm.ln.map(l => ({ sampleName: l.sn, volume: l.v, muted: l.mu })) } } : {}),
-      volume: t.v ?? 0.7,
-      muted: t.mu || false,
-      ...(t.fx ? { effect: { id: t.fx, ...(t.fw != null ? { wet: t.fw } : {}) } } : {}),
-      steps: (t.s || []).map((s): Step => ({
-        position: s.p,
-        note: s.nt,
-        velocity: s.vl,
-        duration: s.d,
-        ...(s.sm ? { sampleName: s.sm } : {}),
-      })),
-    })),
+    tracks: (data.t || []).map(deserializeTrack),
   };
 }
 

@@ -1,4 +1,5 @@
 import type { MusicalKey, ScaleType, Track } from './types';
+import { isPitched } from './types';
 
 export const MAJOR_INTERVALS = [0, 2, 4, 5, 7, 9, 11];
 export const MINOR_INTERVALS = [0, 2, 3, 5, 7, 8, 10]; // natural minor
@@ -114,7 +115,7 @@ export function transposeAllTracks(
 ): Track[] {
   return tracks.map(track => {
     if (track.type === 'synth') {
-      const octave = (track.synth?.octave ?? 0) + 4;
+      const octave = track.synth.octave + 4;
       const visibleNotes = getScaleNotes(newKey, newScale, octave, 10);
       const minNote = visibleNotes[0];
       const maxNote = visibleNotes[visibleNotes.length - 1];
@@ -136,13 +137,13 @@ export function transposeAllTracks(
         ...track,
         steps: track.steps
           .map(step => {
-            if (step.note === 60) return step; // grid-placed, no pitch info
+            if (!isPitched(step)) return step; // grid-placed, no pitch info
             return {
               ...step,
               note: transposeNote(step.note, oldKey, oldScale, newKey, newScale),
             };
           })
-          .filter(step => step.note === 60 || (step.note >= minNote && step.note <= maxNote)),
+          .filter(step => !isPitched(step) || (step.note >= minNote && step.note <= maxNote)),
       };
     }
     return track;
