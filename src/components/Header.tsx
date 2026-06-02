@@ -4,6 +4,7 @@ import type { GridResolution, MusicalKey, ScaleType, Song } from '../types';
 import { ALL_KEYS, ALL_SCALES } from '../scales';
 import { importFromFile } from '../persistence';
 import { Tooltip } from './Tooltip';
+import { Dropdown } from './Dropdown';
 
 const RESOLUTIONS: { value: GridResolution; label: string }[] = [
   { value: 8, label: '8th' },
@@ -96,7 +97,7 @@ export function Header({ store, playing, onPlay, onStop, onShare, onSaveFile, on
         </Tooltip>
       )}
 
-      <Tooltip position="bottom" text={playing ? 'Stop playback' : 'Start playback (Space)'}>
+      <Tooltip text={playing ? 'Stop playback' : 'Start playback (Space)'}>
         <button
           onClick={playing ? onStop : onPlay}
           className={`px-4 py-1.5 rounded font-medium text-sm cursor-pointer ${
@@ -141,62 +142,56 @@ export function Header({ store, playing, onPlay, onStop, onShare, onSaveFile, on
           onKeyDown={e => { if (e.key === 'Enter') commitMeasures(); }}
           className="bg-zinc-800 text-white w-14 px-2 py-1 rounded border border-zinc-600 text-sm text-center outline-none focus:border-purple-500"
         />
-        <Tooltip text="Double the bars and copy all content into the new bars">
-          <button
-            onClick={onDoubleUp}
-            className="px-3 py-1.5 bg-zinc-700 hover:bg-zinc-600 text-zinc-300 text-sm rounded cursor-pointer"
-          >
-            Double up!
-          </button>
-        </Tooltip>
+        {(() => {
+          const canDoubleUp = song.tracks.some(t => t.steps.length > 0);
+          return (
+            <Tooltip text={canDoubleUp ? 'Double the bars and copy all content into the new bars' : 'Add a track with some notes first'}>
+              <button
+                onClick={onDoubleUp}
+                disabled={!canDoubleUp}
+                className="px-3 py-1.5 bg-zinc-700 hover:bg-zinc-600 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-zinc-700 text-zinc-300 text-sm rounded cursor-pointer"
+              >
+                Double up!
+              </button>
+            </Tooltip>
+          );
+        })()}
       </div>
 
       <div className="flex items-center gap-2">
         <label className="text-zinc-400 text-sm">Grid</label>
-        <select
-          value={resolution}
-          onChange={e => onResolutionChange(Number(e.target.value) as GridResolution)}
-          className="bg-zinc-800 text-white text-sm px-2 py-1 rounded border border-zinc-600 outline-none cursor-pointer"
-        >
-          {RESOLUTIONS.map(r => (
-            <option key={r.value} value={r.value}>{r.label}</option>
-          ))}
-        </select>
+        <Dropdown
+          value={String(resolution)}
+          onChange={v => onResolutionChange(Number(v) as GridResolution)}
+          options={RESOLUTIONS.map(r => ({ value: String(r.value), label: r.label }))}
+          triggerClassName="bg-zinc-800 text-white text-sm px-2 py-1 rounded border border-zinc-600 cursor-pointer"
+        />
       </div>
 
       <div className="flex items-center gap-2">
         <label className="text-zinc-400 text-sm">Zoom</label>
-        <select
-          value={zoom}
-          onChange={e => onZoomChange(Number(e.target.value))}
-          className="bg-zinc-800 text-white text-sm px-2 py-1 rounded border border-zinc-600 outline-none cursor-pointer"
-        >
-          {ZOOM_LEVELS.map(z => (
-            <option key={z} value={z}>{Math.round(z * 100)}%</option>
-          ))}
-        </select>
+        <Dropdown
+          value={String(zoom)}
+          onChange={v => onZoomChange(Number(v))}
+          options={ZOOM_LEVELS.map(z => ({ value: String(z), label: `${Math.round(z * 100)}%` }))}
+          triggerClassName="bg-zinc-800 text-white text-sm px-2 py-1 rounded border border-zinc-600 cursor-pointer"
+        />
       </div>
 
       <div className="flex items-center gap-2">
         <label className="text-zinc-400 text-sm">Key</label>
-        <select
+        <Dropdown
           value={song.key}
-          onChange={e => onKeyChange(e.target.value as MusicalKey, song.scale)}
-          className="bg-zinc-800 text-white text-sm px-2 py-1 rounded border border-zinc-600 outline-none cursor-pointer"
-        >
-          {ALL_KEYS.map(k => (
-            <option key={k} value={k}>{k}</option>
-          ))}
-        </select>
-        <select
+          onChange={v => onKeyChange(v as MusicalKey, song.scale)}
+          options={ALL_KEYS.map(k => ({ value: k, label: k }))}
+          triggerClassName="bg-zinc-800 text-white text-sm px-2 py-1 rounded border border-zinc-600 cursor-pointer"
+        />
+        <Dropdown
           value={song.scale}
-          onChange={e => onKeyChange(song.key, e.target.value as ScaleType)}
-          className="bg-zinc-800 text-white text-sm px-2 py-1 rounded border border-zinc-600 outline-none cursor-pointer"
-        >
-          {ALL_SCALES.map(s => (
-            <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>
-          ))}
-        </select>
+          onChange={v => onKeyChange(song.key, v as ScaleType)}
+          options={ALL_SCALES.map(s => ({ value: s, label: s.charAt(0).toUpperCase() + s.slice(1) }))}
+          triggerClassName="bg-zinc-800 text-white text-sm px-2 py-1 rounded border border-zinc-600 cursor-pointer"
+        />
       </div>
 
       <div className="flex-1" />

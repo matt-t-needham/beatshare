@@ -34,13 +34,13 @@ const COLORS = {
 const CATEGORIES: SampleCategory[] = [
   { id: 'kick',      name: 'Kick',           abbr: 'Kck', ...COLORS.coral,    sortOrder: 0 },
   { id: 'snare',     name: 'Snare',          abbr: 'Snr', ...COLORS.blue,     sortOrder: 1 },
-  { id: 'hh-closed', name: 'Hi-Hat Closed',  abbr: 'HHC', ...COLORS.yellow,   sortOrder: 2 },
-  { id: 'hh-open',   name: 'Hi-Hat Open',    abbr: 'HHO', ...COLORS.amber,    sortOrder: 3 },
+  { id: 'hh-closed', name: 'Closed Hi-Hat',  abbr: 'HHC', ...COLORS.yellow,   sortOrder: 2 },
+  { id: 'hh-open',   name: 'Open Hi-Hat',    abbr: 'HHO', ...COLORS.amber,    sortOrder: 3 },
   { id: 'crash',     name: 'Crash',          abbr: 'Crs', ...COLORS.green,    sortOrder: 4 },
   { id: 'ride',      name: 'Ride',           abbr: 'Rid', ...COLORS.teal,     sortOrder: 5 },
-  { id: 'tom-hi',    name: 'Tom High',       abbr: 'HTm', ...COLORS.indigo,   sortOrder: 6 },
-  { id: 'tom-mid',   name: 'Tom Mid',        abbr: 'MTm', ...COLORS.violet,   sortOrder: 7 },
-  { id: 'tom-low',   name: 'Tom Low',        abbr: 'LTm', ...COLORS.magenta,  sortOrder: 8 },
+  { id: 'tom-hi',    name: 'High Tom',       abbr: 'HTm', ...COLORS.indigo,   sortOrder: 6 },
+  { id: 'tom-mid',   name: 'Mid Tom',        abbr: 'MTm', ...COLORS.violet,   sortOrder: 7 },
+  { id: 'tom-low',   name: 'Low Tom',        abbr: 'LTm', ...COLORS.magenta,  sortOrder: 8 },
   { id: 'clap',      name: 'Clap',           abbr: 'Clp', ...COLORS.pink,     sortOrder: 9 },
   { id: 'cowbell',   name: 'Cowbell',        abbr: 'Cow', ...COLORS.orange,   sortOrder: 10 },
   { id: 'rimshot',   name: 'Rimshot',        abbr: 'Rim', ...COLORS.slate,    sortOrder: 11 },
@@ -87,8 +87,9 @@ const RULES: [RegExp, string][] = [
   [/RimShot/i, 'rimshot'],
   [/Tamb/i, 'tambourine'],
 
-  // TR-909 prefixes (before TR-808 since some overlap)
-  [/^BT\d/i, 'kick'],            // BT = bass drum with tune param
+  // TR-909 prefixes (before TR-808 since some overlap).
+  // TR-909 uses hex-style param chars (0, 3, 7, A) — use [0-9A] not \d.
+  [/^BT[0-9A]/i, 'kick'],        // BT = bass tom (kick variant)
   [/^CSHD/i, 'snare'],           // crash/snare hybrid
   [/^HHCD/i, 'hh-closed'],
   [/^HHOD/i, 'hh-open'],
@@ -97,22 +98,24 @@ const RULES: [RegExp, string][] = [
   [/^RIDE/i, 'ride'],
   [/^OPCL/i, 'crash'],           // open/close cymbal
 
-  // TR-808 directory-style prefixes (BD0000.WAV etc)
+  // TR-808 directory-style prefixes (BD0000.WAV etc).
+  // Some TR-909 variants (HTAD0, MTAD0, LTAD0) also use hex chars in position 3.
   [/^BD\d/i, 'kick'],
   [/^SD\d/i, 'snare'],
   [/^CH\d/i, 'hh-closed'],
-  [/^HC\d/i, 'hh-closed'],
+  [/^HC\d/i, 'perc'],            // TR-808 High Conga
+  [/^LC\d/i, 'perc'],            // TR-808 Low Conga
+  [/^MC\d/i, 'perc'],            // TR-808 Mid Conga
   [/^OH\d/i, 'hh-open'],
   [/^CY\d/i, 'crash'],
-  [/^HT\d/i, 'tom-hi'],
-  [/^MT\d/i, 'tom-mid'],
-  [/^LT\d/i, 'tom-low'],
-  [/^CP\d/i, 'clap'],
-  [/^CL\d/i, 'clap'],
-  [/^CB\d/i, 'cowbell'],
-  [/^RS\d/i, 'rimshot'],
-  [/^MA\d/i, 'other'],
-  [/^MC\d/i, 'other'],
+  [/^HT[0-9A]/i, 'tom-hi'],
+  [/^MT[0-9A]/i, 'tom-mid'],
+  [/^LT[0-9A]/i, 'tom-low'],
+  [/^CP(\d|$)/i, 'clap'],        // CP standalone or CP01 etc
+  [/^CL(\d|$)/i, 'perc'],        // CL standalone (Claves) or CL01 — note: TR-808 CL is Claves, not Clap
+  [/^CB(\d|$)/i, 'cowbell'],
+  [/^RS(\d|$)/i, 'rimshot'],
+  [/^MA(\d|$)/i, 'perc'],        // TR-808 Maraca
 
   // Instrument categories (open-samples directory structure + generic)
   [/Pianos\//i, 'piano'],
@@ -173,6 +176,14 @@ const ADJECTIVES = [
   'Wobbly', 'Chunky', 'Snappy', 'Punchy', 'Gritty', 'Mellow', 'Funky',
   'Spicy', 'Crunchy', 'Groovy', 'Slick', 'Toasty', 'Buzzy', 'Hazy',
   'Peppy', 'Zesty', 'Plucky', 'Breezy', 'Lush', 'Vivid', 'Swift', 'Bold',
+  'Sleek', 'Glossy', 'Murky', 'Misty', 'Frosty', 'Smoky', 'Tangy', 'Sunny',
+  'Stormy', 'Brisk', 'Sticky', 'Shimmering', 'Radiant', 'Pristine', 'Vibrant',
+  'Mystic', 'Ethereal', 'Dreamy', 'Hollow', 'Warm', 'Bright', 'Sharp', 'Soft',
+  'Heavy', 'Wild', 'Tame', 'Quirky', 'Sneaky', 'Jolly', 'Cheeky', 'Sassy',
+  'Moody', 'Drowsy', 'Eager', 'Smooth', 'Rough', 'Furry', 'Fluffy', 'Shiny',
+  'Matte', 'Rugged', 'Polished', 'Distorted', 'Murmuring', 'Tipsy', 'Snazzy',
+  'Quaint', 'Daring', 'Glowing', 'Twinkly', 'Shaggy', 'Plump', 'Lanky',
+  'Sturdy', 'Brittle', 'Squishy', 'Jagged', 'Curly', 'Wavy', 'Foggy', 'Sleepy',
 ];
 
 const NOUNS = [
@@ -180,6 +191,15 @@ const NOUNS = [
   'Frost', 'Blitz', 'Cedar', 'Ember', 'Vapor', 'Comet', 'Flint',
   'Gadget', 'Nimbus', 'Prism', 'Rogue', 'Sonic', 'Titan', 'Zinc',
   'Pulse', 'Spark', 'Drift', 'Beacon', 'Marble', 'Riddle', 'Glitch', 'Fable',
+  'Ranger', 'Hopper', 'Mango', 'Cobra', 'Falcon', 'Otter', 'Badger', 'Phoenix',
+  'Dragon', 'Wraith', 'Specter', 'Mirage', 'Echo', 'Aurora', 'Eclipse',
+  'Tempest', 'Cyclone', 'Boulder', 'Pebble', 'Ravine', 'Geyser', 'Cinder',
+  'Lava', 'Glacier', 'Coral', 'Reef', 'Lagoon', 'Atoll', 'Compass', 'Anchor',
+  'Mast', 'Hammer', 'Anvil', 'Forge', 'Lantern', 'Torch', 'Wick', 'Helix',
+  'Vortex', 'Cascade', 'Ripple', 'Whisper', 'Static', 'Crackle', 'Patch',
+  'Bramble', 'Thistle', 'Willow', 'Birch', 'Acorn', 'Ivy', 'Moss', 'Fern',
+  'Saddle', 'Crayon', 'Marbles', 'Domino', 'Kettle', 'Spindle', 'Lasso',
+  'Pickle',
 ];
 
 function simpleHash(s: string): number {
@@ -199,7 +219,7 @@ export function friendlyName(filename: string): string {
   const h = simpleHash(filename);
   const adj = ADJECTIVES[h % ADJECTIVES.length];
   const noun = NOUNS[(h >>> 8) % NOUNS.length];
-  return `${adj} ${noun} ${cat.abbr}`;
+  return `${adj} ${noun} ${cat.name}`;
 }
 
 /**
@@ -227,6 +247,25 @@ export function friendlyNames(filenames: string[]): Map<string, string> {
     }
   }
   return result;
+}
+
+const DRUM_CATEGORY_IDS = new Set([
+  'kick', 'snare', 'hh-closed', 'hh-open', 'crash', 'ride',
+  'tom-hi', 'tom-mid', 'tom-low', 'clap', 'cowbell', 'rimshot', 'tambourine', 'perc',
+]);
+
+/**
+ * Classify a pack as drum-oriented or sample-oriented based on how many of its
+ * samples fall into drum categories vs instrument categories.
+ */
+export function packKind(sampleNames: string[]): 'drum' | 'sample' {
+  let drum = 0;
+  let sample = 0;
+  for (const name of sampleNames) {
+    if (DRUM_CATEGORY_IDS.has(classifySample(name).id)) drum++;
+    else sample++;
+  }
+  return drum >= sample ? 'drum' : 'sample';
 }
 
 /**

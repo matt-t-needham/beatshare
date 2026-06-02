@@ -90,7 +90,7 @@ export function StepGrid({
   useEffect(() => {
     const prevIds = prevTrackIdsRef.current;
     const currentIds = song.tracks.map(t => t.id);
-    if (prevIds.length > 0 && currentIds.length > prevIds.length) {
+    if (currentIds.length > prevIds.length) {
       const newIds = currentIds.filter(id => !prevIds.includes(id));
       if (newIds.length > 0) {
         setExpandedTrackIds(prev => {
@@ -376,12 +376,12 @@ function TrackRow({
   }, [commitRename]);
 
   const activeSteps = useMemo(() => {
-    const map = new Map<number, { note: number; sampleName?: string }>();
+    const map = new Map<number, Array<{ note: number; sampleName?: string }>>();
     for (const step of track.steps) {
       const col = Math.floor(step.position / stepSize);
-      if (!map.has(col)) {
-        map.set(col, { note: step.note, sampleName: step.sampleName });
-      }
+      const arr = map.get(col);
+      if (arr) arr.push({ note: step.note, sampleName: step.sampleName });
+      else map.set(col, [{ note: step.note, sampleName: step.sampleName }]);
     }
     return map;
   }, [track.steps, stepSize]);
@@ -506,58 +506,61 @@ function TrackRow({
           </div>
         </div>
 
-        <div className="flex gap-px shrink-0" style={{ marginLeft: CELL_GAP }}>
-          {Array.from({ length: totalSteps }, (_, col) => {
-            const active = activeSteps.get(col);
-            const isOnBeat = col % stepsPerBeat === 0;
-            const isBarStart = col > 0 && col % stepsPerBar === 0;
+        {!expanded && (
+          <div className="flex gap-px shrink-0" style={{ marginLeft: CELL_GAP }}>
+            {Array.from({ length: totalSteps }, (_, col) => {
+              const steps = activeSteps.get(col);
+              const isOnBeat = col % stepsPerBeat === 0;
+              const isBarStart = col > 0 && col % stepsPerBar === 0;
+              const isActive = !!steps && steps.length > 0;
 
-            const stepSampleName = active?.sampleName;
-            const stepColor = stepSampleName
-              ? classifySample(stepSampleName)
-              : null;
+              const colorFor = (step: { note: number; sampleName?: string }): string => {
+                if (step.sampleName) return classifySample(step.sampleName).color;
+                return trackColor.color;
+              };
 
-            const activeColor = stepColor ? stepColor.color : trackColor.color;
-            const activeHover = stepColor ? stepColor.hoverColor : trackColor.hoverColor;
+              let bgStyle: React.CSSProperties = { width: cellSize, height: cellSize };
+              if (isActive && steps.length === 1) {
+                bgStyle.backgroundColor = colorFor(steps[0]);
+              } else if (isActive && steps.length > 1) {
+                const slice = 360 / steps.length;
+                const stops = steps
+                  .map((s, i) => `${colorFor(s)} ${i * slice}deg ${(i + 1) * slice}deg`)
+                  .join(', ');
+                bgStyle.background = `conic-gradient(${stops})`;
+              }
 
-            const stepLabel = active
-              ? (stepSampleName ? classifySample(stepSampleName).abbr : track.type === 'synth' ? midiNoteToName(active.note).replace(/\d+/, '') : track.type === 'drum-machine' ? '' : '')
-              : '';
+              const titleText = isActive
+                ? steps.map(s => s.sampleName ? friendlyName(s.sampleName) : midiNoteToName(s.note)).join(', ')
+                : `Step ${col + 1}`;
 
-            return (
-              <div key={col} className="relative shrink-0" style={{ width: cellSize }}>
-                {isBarStart && (
-                  <div className="absolute left-0 top-0 bottom-0 w-px" style={{ backgroundColor: 'rgba(255,255,255,0.18)', marginLeft: -1 }} />
-                )}
-                <button
-                  onMouseDown={onStepMouseDown ? (e => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    onStepMouseDown(col, !!active);
-                  }) : undefined}
-                  onMouseEnter={onStepMouseEnter ? (() => onStepMouseEnter(col)) : undefined}
-                  style={{
-                    width: cellSize,
-                    height: cellSize,
-                    backgroundColor: active ? activeColor : undefined,
-                  }}
-                  className={`
-                    rounded-sm text-[9px] font-mono cursor-pointer transition-colors select-none text-white
-                    ${!active ? (selected
-                      ? (isOnBeat ? 'bg-zinc-600 hover:bg-zinc-500' : 'bg-zinc-700 hover:bg-zinc-600')
-                      : (isOnBeat ? 'bg-zinc-700 hover:bg-zinc-600' : 'bg-zinc-800 hover:bg-zinc-700')
-                    ) : ''}
-                  `}
-                  onMouseOver={active ? (e) => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = activeHover; } : undefined}
-                  onMouseOut={active ? (e) => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = activeColor; } : undefined}
-                  title={active ? (stepSampleName ? friendlyName(stepSampleName) : midiNoteToName(active.note)) : `Step ${col + 1}`}
-                >
-                  {stepLabel}
-                </button>
-              </div>
-            );
-          })}
-        </div>
+              return (
+                <div key={col} className="relative shrink-0" style={{ width: cellSize, height: cellSize }}>
+                  {isBarStart && (
+                    <div className="absolute left-0 top-0 bottom-0 w-px" style={{ backgroundColor: 'rgba(255,255,255,0.18)', marginLeft: -1 }} />
+                  )}
+                  <button
+                    onMouseDown={onStepMouseDown ? (e => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      onStepMouseDown(col, isActive);
+                    }) : undefined}
+                    onMouseEnter={onStepMouseEnter ? (() => onStepMouseEnter(col)) : undefined}
+                    style={bgStyle}
+                    className={`
+                      rounded-sm cursor-pointer transition-colors select-none
+                      ${!isActive ? (selected
+                        ? (isOnBeat ? 'bg-zinc-600 hover:bg-zinc-500' : 'bg-zinc-700 hover:bg-zinc-600')
+                        : (isOnBeat ? 'bg-zinc-700 hover:bg-zinc-600' : 'bg-zinc-800 hover:bg-zinc-700')
+                      ) : ''}
+                    `}
+                    title={titleText}
+                  />
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
     </div>
   );

@@ -3,6 +3,8 @@ import type { Track, SampleTrack, Waveform, InstalledPack, GridResolution } from
 import { ticksPerStep, TRACK_DEFAULTS } from '../types';
 import { groupSamplesByCategory, friendlyNames } from '../sample-categories';
 import { Tooltip } from './Tooltip';
+import { Dropdown } from './Dropdown';
+import { SamplePopover } from './SamplePopover';
 
 const EFFECT_PRESETS: { id: string; label: string }[] = [
   { id: 'reverb', label: 'Reverb' },
@@ -25,61 +27,33 @@ interface TrackSettingsProps {
   resolution?: GridResolution;
 }
 
-interface KnobProps {
+interface SliderProps {
   value: number;
   min: number;
   max: number;
+  step?: number;
   onChange: (v: number) => void;
   label: string;
   formatValue?: (v: number) => string;
-  sensitivity?: number;
 }
 
-function Knob({ value, min, max, onChange, label, formatValue, sensitivity = 2 }: KnobProps) {
-  const range = max - min;
-  const normalized = (value - min) / range;
-  const rotation = (normalized - 0.5) * 300;
-
-  const handleMouseDown = useCallback((e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    const startY = e.clientY;
-    const startValue = value;
-
-    const onMouseMove = (ev: MouseEvent) => {
-      const delta = Math.round((startY - ev.clientY) / sensitivity);
-      const newValue = Math.max(min, Math.min(max, startValue + delta));
-      onChange(newValue);
-    };
-    const onMouseUp = () => {
-      document.removeEventListener('mousemove', onMouseMove);
-      document.removeEventListener('mouseup', onMouseUp);
-    };
-    document.addEventListener('mousemove', onMouseMove);
-    document.addEventListener('mouseup', onMouseUp);
-  }, [value, onChange, min, max, sensitivity]);
-
+function Slider({ value, min, max, step = 1, onChange, label, formatValue }: SliderProps) {
   const display = formatValue ? formatValue(value) : String(value);
-
   return (
-    <div className="flex flex-col items-center gap-0.5">
-      <Tooltip text={`${label}: ${display} (drag up/down)`}>
-        <div
-          onMouseDown={handleMouseDown}
-          className="w-7 h-7 rounded-full bg-zinc-700 border border-zinc-500 cursor-ns-resize relative select-none hover:border-purple-500 transition-colors"
-        >
-          <div
-            className="absolute left-1/2 w-0.5 h-2.5 bg-purple-400 rounded-full"
-            style={{
-              transformOrigin: '50% 100%',
-              transform: `translateX(-50%) rotate(${rotation}deg)`,
-              top: '3px',
-            }}
-          />
-          <div className="absolute left-1/2 top-1/2 w-1 h-1 bg-zinc-500 rounded-full -translate-x-1/2 -translate-y-1/2" />
-        </div>
-      </Tooltip>
-      <span className="text-zinc-400 text-[9px] font-mono leading-none">{display}</span>
+    <div className="flex items-center gap-2">
+      <label className="text-zinc-400 text-[10px] uppercase tracking-wider w-12 shrink-0">{label}</label>
+      <input
+        type="range"
+        min={min}
+        max={max}
+        step={step}
+        value={value}
+        onChange={e => onChange(Number(e.target.value))}
+        onClick={e => e.stopPropagation()}
+        onMouseDown={e => e.stopPropagation()}
+        className="slider-thin flex-1 min-w-0"
+      />
+      <span className="text-zinc-400 text-[10px] font-mono w-9 text-right shrink-0">{display}</span>
     </div>
   );
 }
@@ -135,37 +109,34 @@ function SamplePicker({
   const pack = installedPacks.find(p => p.id === track.sample.packId);
   const grouped = useMemo(() => pack ? groupSamplesByCategory(pack.sampleNames) : [], [pack]);
   const nameMap = useMemo(() => pack ? friendlyNames(pack.sampleNames) : new Map<string, string>(), [pack]);
+  const triggerLabel = track.sample.sampleName
+    ? (nameMap.get(track.sample.sampleName) ?? track.sample.sampleName)
+    : 'Pick sample...';
 
   return (
     <Row label="Sample">
-      <select
-        value={track.sample.sampleName || ''}
-        onChange={e => onUpdate({ sample: { ...track.sample, sampleName: e.target.value } })}
-        className="bg-zinc-900 text-zinc-200 text-xs px-1 py-0.5 rounded border border-zinc-600 outline-none cursor-pointer flex-1 min-w-0 h-5"
-      >
-        {grouped.map(({ category, samples }) =>
-          samples.map(name => (
-            <option key={name} value={name}>
-              {category.abbr} — {nameMap.get(name) ?? name}
-            </option>
-          ))
-        )}
-      </select>
+      <SamplePopover
+        value={track.sample.sampleName || undefined}
+        groupedSamples={grouped}
+        onSelect={name => onUpdate({ sample: { ...track.sample, sampleName: name } })}
+        trigger={triggerLabel}
+        triggerClassName="bg-zinc-900 text-zinc-200 text-xs px-1 py-0.5 rounded border border-zinc-600 cursor-pointer flex-1 min-w-0 h-5 truncate text-left"
+      />
     </Row>
   );
 }
 
-function Row({ label, children }: { label: string; children: React.ReactNode }) {
+function Row({ label, children, rightAlign }: { label: string; children: React.ReactNode; rightAlign?: boolean }) {
   return (
     <div className="flex items-center gap-1.5">
-      <label className="text-zinc-400 text-[10px] uppercase tracking-wider w-10 shrink-0">{label}</label>
-      <div className="flex items-center gap-1 flex-1 min-w-0">{children}</div>
+      <label className="text-zinc-400 text-[10px] uppercase tracking-wider w-12 shrink-0">{label}</label>
+      <div className={`flex items-center gap-1 flex-1 min-w-0 ${rightAlign ? 'justify-end' : ''}`}>{children}</div>
     </div>
   );
 }
 
-function KnobPair({ children }: { children: React.ReactNode }) {
-  return <div className="flex items-center justify-around gap-2 py-1">{children}</div>;
+function SliderStack({ children }: { children: React.ReactNode }) {
+  return <div className="flex flex-col gap-1">{children}</div>;
 }
 
 export function TrackSettings({ track, onUpdate, installedPacks = [], resolution }: TrackSettingsProps) {
@@ -193,23 +164,17 @@ export function TrackSettings({ track, onUpdate, installedPacks = [], resolution
 
   const effect = track.effect;
   const fxBlock = (
-    <Row label="FX">
-      <select
-        value={effect?.id || ''}
-        onChange={e => {
-          const id = e.target.value;
-          onUpdate({ effect: id ? { id, wet: effect?.wet ?? TRACK_DEFAULTS.effectWet } : undefined });
-        }}
-        onClick={e => e.stopPropagation()}
-        className="bg-zinc-900 text-zinc-200 text-xs px-1 py-0.5 rounded border border-zinc-600 outline-none cursor-pointer flex-1 min-w-0 h-5"
-      >
-        <option value="">None</option>
-        {EFFECT_PRESETS.map(fx => (
-          <option key={fx.id} value={fx.id}>{fx.label}</option>
-        ))}
-      </select>
+    <>
+      <Row label="FX">
+        <Dropdown
+          value={effect?.id || ''}
+          onChange={id => onUpdate({ effect: id ? { id, wet: effect?.wet ?? TRACK_DEFAULTS.effectWet } : undefined })}
+          options={[{ value: '', label: 'None' }, ...EFFECT_PRESETS.map(fx => ({ value: fx.id, label: fx.label }))]}
+          triggerClassName="bg-zinc-900 text-zinc-200 text-xs px-1 py-0.5 rounded border border-zinc-600 cursor-pointer flex-1 min-w-0 h-5"
+        />
+      </Row>
       {effect && (
-        <Knob
+        <Slider
           value={Math.round((effect.wet ?? TRACK_DEFAULTS.effectWet) * 100)}
           min={0}
           max={100}
@@ -218,11 +183,11 @@ export function TrackSettings({ track, onUpdate, installedPacks = [], resolution
           formatValue={v => `${v}%`}
         />
       )}
-    </Row>
+    </>
   );
 
-  const humanizeBlock = resolution && (
-    <Row label="Groove">
+  const humanizeBlock = resolution && track.type !== 'drum-machine' && (
+    <div className="flex items-center justify-end">
       <button
         onClick={e => { e.stopPropagation(); handleHumanize(); }}
         className="h-5 px-2 rounded-l bg-zinc-700 hover:bg-zinc-600 text-zinc-200 text-xs cursor-pointer border border-zinc-600 border-r-0 flex items-center"
@@ -245,132 +210,140 @@ export function TrackSettings({ track, onUpdate, installedPacks = [], resolution
           <polyline points="7 14 3 10 7 6" />
         </svg>
       </button>
-    </Row>
+    </div>
   );
 
+  const synth = track.type === 'synth' ? track.synth : null;
+  const sample = track.type === 'sample' ? track.sample : null;
+
+  const topSelectors: React.ReactNode[] = [];
+  const bottomSliders: React.ReactNode[] = [];
+
+  if (sample) {
+    topSelectors.push(
+      sample.packId && (
+        <SamplePicker
+          key="sample-picker"
+          track={track as SampleTrack}
+          installedPacks={installedPacks}
+          onUpdate={onUpdate}
+        />
+      ),
+    );
+    bottomSliders.push(
+      <SliderStack key="sample-knobs">
+        <Slider
+          value={sample.pitchShift ?? TRACK_DEFAULTS.samplePitchShift}
+          min={-2}
+          max={2}
+          onChange={v => onUpdate({ sample: { ...sample, pitchShift: v } })}
+          label="Pitch"
+          formatValue={v => (v >= 0 ? `+${v}` : String(v))}
+        />
+        <Slider
+          value={sample.decay ?? TRACK_DEFAULTS.sampleDecay}
+          min={0}
+          max={100}
+          onChange={v => onUpdate({ sample: { ...sample, decay: v } })}
+          label="Decay"
+          formatValue={v => `${v}%`}
+        />
+        <Slider
+          value={Math.round(track.volume * 100)}
+          min={0}
+          max={100}
+          onChange={v => onUpdate({ volume: v / 100 })}
+          label="Volume"
+          formatValue={v => `${v}%`}
+        />
+      </SliderStack>,
+    );
+  }
+
+  if (synth) {
+    topSelectors.push(
+      <Row key="wave" label="Wave" rightAlign>
+        <WaveSelector
+          value={synth.waveform}
+          onChange={w => onUpdate({ synth: { ...synth, waveform: w } })}
+        />
+      </Row>,
+      <Row key="oct" label="Octave" rightAlign>
+        <button
+          onClick={e => { e.stopPropagation(); onUpdate({ synth: { ...synth, octave: Math.max(-1, synth.octave - 1) } }); }}
+          disabled={synth.octave <= -1}
+          className="w-5 h-5 rounded bg-zinc-700 hover:bg-zinc-600 disabled:opacity-30 disabled:cursor-default cursor-pointer flex items-center justify-center border border-zinc-600 text-zinc-300"
+        >
+          <svg width="8" height="5" viewBox="0 0 10 6" fill="none"><path d="M1 1L5 5L9 1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+        </button>
+        <span className="text-zinc-300 text-xs font-mono w-6 text-center">{synth.octave >= 0 ? `+${synth.octave}` : String(synth.octave)}</span>
+        <button
+          onClick={e => { e.stopPropagation(); onUpdate({ synth: { ...synth, octave: Math.min(1, synth.octave + 1) } }); }}
+          disabled={synth.octave >= 1}
+          className="w-5 h-5 rounded bg-zinc-700 hover:bg-zinc-600 disabled:opacity-30 disabled:cursor-default cursor-pointer flex items-center justify-center border border-zinc-600 text-zinc-300"
+        >
+          <svg width="8" height="5" viewBox="0 0 10 6" fill="none"><path d="M1 5L5 1L9 5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+        </button>
+      </Row>,
+    );
+    bottomSliders.push(
+      <SliderStack key="synth-knobs">
+        <Slider
+          value={synth.decay ?? TRACK_DEFAULTS.synthDecay}
+          min={0}
+          max={100}
+          onChange={v => onUpdate({ synth: { ...synth, decay: v } })}
+          label="Decay"
+          formatValue={v => `${v}%`}
+        />
+        <Slider
+          value={Math.round(track.volume * 100)}
+          min={0}
+          max={100}
+          onChange={v => onUpdate({ volume: v / 100 })}
+          label="Volume"
+          formatValue={v => `${v}%`}
+        />
+      </SliderStack>,
+    );
+  }
+
+  if (track.type === 'drum-machine') {
+    const dm = track.drumMachine;
+    topSelectors.push(
+      <div key="add-lane" className="flex">
+        <button
+          onClick={e => {
+            e.stopPropagation();
+            onUpdate({ drumMachine: { ...dm, lanes: [...dm.lanes, { sampleName: '', volume: 1, muted: false }] } });
+          }}
+          className="bg-zinc-700 hover:bg-zinc-600 text-zinc-300 hover:text-white text-xs px-2 h-5 rounded font-medium cursor-pointer flex-1 text-center"
+        >
+          + Add lane
+        </button>
+      </div>,
+    );
+    bottomSliders.push(
+      <SliderStack key="drum-knobs">
+        <Slider
+          value={Math.round(track.volume * 100)}
+          min={0}
+          max={100}
+          onChange={v => onUpdate({ volume: v / 100 })}
+          label="Volume"
+          formatValue={v => `${v}%`}
+        />
+      </SliderStack>,
+    );
+  }
+
+  topSelectors.push(<div key="fx">{fxBlock}</div>);
+  if (humanizeBlock) topSelectors.push(<div key="groove">{humanizeBlock}</div>);
+
   return (
-    <div className="flex flex-col gap-1 px-1.5 py-1.5" onClick={e => e.stopPropagation()}>
-      {track.type === 'synth' && (() => { const synth = track.synth; return (
-        <>
-          <Row label="Wave">
-            <WaveSelector
-              value={synth.waveform}
-              onChange={w => onUpdate({ synth: { ...synth, waveform: w } })}
-            />
-          </Row>
-          <Row label="Oct">
-            <button
-              onClick={e => { e.stopPropagation(); onUpdate({ synth: { ...synth, octave: Math.max(-1, synth.octave - 1) } }); }}
-              disabled={synth.octave <= -1}
-              className="w-5 h-5 rounded bg-zinc-700 hover:bg-zinc-600 disabled:opacity-30 disabled:cursor-default cursor-pointer flex items-center justify-center border border-zinc-600 text-zinc-300"
-            >
-              <svg width="8" height="5" viewBox="0 0 10 6" fill="none"><path d="M1 1L5 5L9 1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
-            </button>
-            <span className="text-zinc-300 text-xs font-mono w-6 text-center">{synth.octave >= 0 ? `+${synth.octave}` : String(synth.octave)}</span>
-            <button
-              onClick={e => { e.stopPropagation(); onUpdate({ synth: { ...synth, octave: Math.min(1, synth.octave + 1) } }); }}
-              disabled={synth.octave >= 1}
-              className="w-5 h-5 rounded bg-zinc-700 hover:bg-zinc-600 disabled:opacity-30 disabled:cursor-default cursor-pointer flex items-center justify-center border border-zinc-600 text-zinc-300"
-            >
-              <svg width="8" height="5" viewBox="0 0 10 6" fill="none"><path d="M1 5L5 1L9 5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
-            </button>
-          </Row>
-          <KnobPair>
-            <Knob
-              value={synth.decay ?? TRACK_DEFAULTS.synthDecay}
-              min={0}
-              max={100}
-              onChange={v => onUpdate({ synth: { ...synth, decay: v } })}
-              label="Decay"
-              formatValue={v => `${v}%`}
-            />
-            <Knob
-              value={Math.round(track.volume * 100)}
-              min={0}
-              max={100}
-              onChange={v => onUpdate({ volume: v / 100 })}
-              label="Volume"
-              formatValue={v => `${v}%`}
-            />
-          </KnobPair>
-          {fxBlock}
-          {humanizeBlock}
-        </>
-      ); })()}
-
-      {track.type === 'sample' && (() => { const sample = track.sample; return (
-        <>
-          <Row label="Pack">
-            <select
-              value={sample.packId || ''}
-              onChange={e => {
-                const packId = e.target.value;
-                const pack = installedPacks.find(p => p.id === packId);
-                const firstSample = pack?.sampleNames[0] || '';
-                onUpdate({ sample: { packId, sampleName: firstSample } });
-              }}
-              className="bg-zinc-900 text-zinc-200 text-xs px-1 py-0.5 rounded border border-zinc-600 outline-none cursor-pointer flex-1 min-w-0 h-5"
-            >
-              <option value="">Select pack...</option>
-              {installedPacks.map(p => (
-                <option key={p.id} value={p.id}>{p.name}</option>
-              ))}
-            </select>
-          </Row>
-          {sample.packId && (
-            <SamplePicker
-              track={track}
-              installedPacks={installedPacks}
-              onUpdate={onUpdate}
-            />
-          )}
-          <KnobPair>
-            <Knob
-              value={sample.pitchShift ?? TRACK_DEFAULTS.samplePitchShift}
-              min={-2}
-              max={2}
-              onChange={v => onUpdate({ sample: { ...sample, pitchShift: v } })}
-              label="Pitch"
-              formatValue={v => (v >= 0 ? `+${v}` : String(v))}
-              sensitivity={6}
-            />
-            <Knob
-              value={sample.decay ?? TRACK_DEFAULTS.sampleDecay}
-              min={0}
-              max={100}
-              onChange={v => onUpdate({ sample: { ...sample, decay: v } })}
-              label="Decay"
-              formatValue={v => `${v}%`}
-            />
-            <Knob
-              value={Math.round(track.volume * 100)}
-              min={0}
-              max={100}
-              onChange={v => onUpdate({ volume: v / 100 })}
-              label="Volume"
-              formatValue={v => `${v}%`}
-            />
-          </KnobPair>
-          {fxBlock}
-          {humanizeBlock}
-        </>
-      ); })()}
-
-      {track.type === 'drum-machine' && (
-        <>
-          <KnobPair>
-            <Knob
-              value={Math.round(track.volume * 100)}
-              min={0}
-              max={100}
-              onChange={v => onUpdate({ volume: v / 100 })}
-              label="Volume"
-              formatValue={v => `${v}%`}
-            />
-          </KnobPair>
-          {fxBlock}
-        </>
-      )}
+    <div className="h-full flex flex-col justify-between gap-2 px-1.5 py-1.5" onClick={e => e.stopPropagation()}>
+      <div className="flex flex-col gap-1">{topSelectors}</div>
+      <div className="flex flex-col gap-1">{bottomSliders}</div>
     </div>
   );
 }

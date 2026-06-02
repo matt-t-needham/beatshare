@@ -5,6 +5,7 @@ import { classifySample, friendlyName, groupSamplesByCategory } from '../sample-
 import { STEP_CELL_W, STICKY_COL_W, CONTROLS_W, ROW_LABEL_W, CELL_GAP } from './StepGrid';
 import { useDragPaint } from '../hooks/useDragPaint';
 import { IconButton } from './IconButton';
+import { SamplePopover } from './SamplePopover';
 
 interface DrumGridProps {
   track: DrumTrack;
@@ -63,11 +64,6 @@ export function DrumGrid({
     onUpdateTrack({ drumMachine: { ...track.drumMachine, lanes: newLanes }, steps: newSteps });
   }, [lanes, track.drumMachine, track.steps, onUpdateTrack]);
 
-  const addLane = useCallback((sampleName: string) => {
-    const newLane: DrumLane = { sampleName, volume: 1, muted: false };
-    onUpdateTrack({ drumMachine: { ...track.drumMachine, lanes: [...lanes, newLane] } });
-  }, [lanes, track.drumMachine, onUpdateTrack]);
-
   // Lane-locked drag: only paint/erase within the lane where the drag started.
   const dragSampleRef = useRef<string | null>(null);
   const drag = useDragPaint<{ col: number; sampleName: string }>(
@@ -97,12 +93,15 @@ export function DrumGrid({
         </div>
         <div style={{ width: ROW_LABEL_W }} className="flex flex-col gap-px">
           {lanes.map((lane, laneIdx) => {
+            const isEmpty = !lane.sampleName;
             const cat = classifySample(lane.sampleName);
+            const friendly = isEmpty ? '' : friendlyName(lane.sampleName);
             return (
               <div
-                key={`${lane.sampleName}-${laneIdx}-label`}
+                key={`lane-${laneIdx}-label`}
                 className="flex items-center gap-1.5 pl-2 pr-2"
                 style={{ height: laneHeight }}
+                title={friendly}
               >
                 <IconButton
                   tooltip={lane.muted ? 'Unmute lane' : 'Mute lane'}
@@ -113,34 +112,27 @@ export function DrumGrid({
                   M
                 </IconButton>
                 <div
-                  className="w-2.5 h-2.5 rounded-full shrink-0"
+                  className={`w-2.5 h-2.5 rounded-full shrink-0 ${isEmpty ? 'opacity-30' : ''}`}
                   style={{ backgroundColor: cat.color }}
                 />
-                <span className="text-xs font-mono text-zinc-200 truncate shrink-0 w-8" title={friendlyName(lane.sampleName)}>
-                  {cat.abbr}
+                <span className="text-xs font-mono truncate shrink-0 w-8 text-zinc-200">
+                  {isEmpty ? '' : cat.abbr}
                 </span>
-                <select
-                  value={lane.sampleName}
-                  onChange={e => {
+                <SamplePopover
+                  value={lane.sampleName || undefined}
+                  groupedSamples={grouped}
+                  onSelect={newName => {
                     const oldName = lane.sampleName;
-                    const newName = e.target.value;
                     const newLanes = lanes.map((l, i) => i === laneIdx ? { ...l, sampleName: newName } : l);
-                    const newSteps = track.steps.map(s => s.sampleName === oldName ? { ...s, sampleName: newName } : s);
+                    const newSteps = oldName
+                      ? track.steps.map(s => s.sampleName === oldName ? { ...s, sampleName: newName } : s)
+                      : track.steps;
                     onUpdateTrack({ drumMachine: { ...track.drumMachine, lanes: newLanes }, steps: newSteps });
                   }}
-                  className="bg-zinc-900 text-zinc-200 text-xs px-1 py-0.5 rounded border border-zinc-600 outline-none cursor-pointer flex-1 min-w-0 h-5"
-                  title="Swap sample"
-                >
-                  {grouped.map(({ category, samples }) => (
-                    <optgroup key={category.id} label={category.name}>
-                      {samples.map(name => (
-                        <option key={name} value={name}>
-                          {name.split('/').pop()?.replace(/\.[^.]+$/, '')}
-                        </option>
-                      ))}
-                    </optgroup>
-                  ))}
-                </select>
+                  trigger={isEmpty ? '' : (lane.sampleName.split('/').pop()?.replace(/\.[^.]+$/, '') ?? lane.sampleName)}
+                  triggerClassName="bg-zinc-900 text-zinc-200 text-xs px-1 py-0.5 rounded border border-zinc-600 outline-none cursor-pointer flex-1 min-w-0 h-5 truncate text-left"
+                  triggerTitle={friendly}
+                />
                 <IconButton
                   tooltip="Remove lane"
                   variant="danger"
@@ -152,69 +144,44 @@ export function DrumGrid({
               </div>
             );
           })}
-          {pack && (
-            <div className="flex items-center px-2 mt-1" style={{ height: laneHeight }}>
-              <select
-                defaultValue=""
-                onChange={e => {
-                  if (e.target.value) {
-                    addLane(e.target.value);
-                    e.target.value = '';
-                  }
-                }}
-                className="bg-zinc-900 text-zinc-300 text-xs px-2 py-0.5 rounded border border-zinc-600 outline-none cursor-pointer w-full h-5"
-              >
-                <option value="" disabled>+ Add lane...</option>
-                {grouped.map(({ category, samples }) => {
-                  const available = samples.filter(name => !lanes.some(l => l.sampleName === name));
-                  return available.length > 0 ? (
-                    <optgroup key={category.id} label={category.name}>
-                      {available.map(name => (
-                        <option key={name} value={name}>
-                          {name.split('/').pop()?.replace(/\.[^.]+$/, '')}
-                        </option>
-                      ))}
-                    </optgroup>
-                  ) : null;
-                })}
-              </select>
-            </div>
-          )}
         </div>
       </div>
 
       {/* Cells column — visual gap from sticky edge */}
       <div className="flex flex-col gap-px shrink-0" style={{ marginLeft: CELL_GAP }}>
         {lanes.map((lane, laneIdx) => {
+          const isEmpty = !lane.sampleName;
           const cat = classifySample(lane.sampleName);
           const laneActive = activeSteps.get(lane.sampleName) ?? new Set<number>();
           return (
-            <div key={`${lane.sampleName}-${laneIdx}-cells`} className="flex gap-px">
+            <div key={`lane-${laneIdx}-cells`} className="flex gap-px">
               {Array.from({ length: totalSteps }, (_, col) => {
-                const isActive = laneActive.has(col);
+                const isActive = !isEmpty && laneActive.has(col);
                 const isOnBeat = col % stepsPerBeat === 0;
                 const isBarStart = col > 0 && col % resolution === 0;
 
                 return (
-                  <div key={col} className="relative shrink-0" style={{ width: cellSize }}>
+                  <div key={col} className="relative shrink-0" style={{ width: cellSize, height: laneHeight }}>
                     {isBarStart && (
                       <div className="absolute left-0 top-0 bottom-0 w-px" style={{ backgroundColor: 'rgba(255,255,255,0.18)', marginLeft: -1 }} />
                     )}
                     <button
-                      onMouseDown={e => {
+                      onMouseDown={isEmpty ? undefined : (e => {
                         e.preventDefault();
                         e.stopPropagation();
                         handleStart(col, lane.sampleName, isActive);
-                      }}
-                      onMouseEnter={() => handleEnter(col, lane.sampleName)}
+                      })}
+                      onMouseEnter={isEmpty ? undefined : (() => handleEnter(col, lane.sampleName))}
+                      disabled={isEmpty}
                       style={{
                         width: cellSize,
                         height: laneHeight,
                         backgroundColor: isActive ? cat.color : undefined,
                       }}
                       className={`
-                        rounded-sm text-[8px] font-mono cursor-pointer transition-colors select-none text-white
-                        ${!isActive ? (isOnBeat ? 'bg-zinc-700 hover:bg-zinc-600' : 'bg-zinc-800 hover:bg-zinc-700') : ''}
+                        rounded-sm text-[8px] font-mono transition-colors select-none text-white
+                        ${isEmpty ? 'bg-zinc-900 cursor-not-allowed opacity-50' : 'cursor-pointer'}
+                        ${!isEmpty && !isActive ? (isOnBeat ? 'bg-zinc-700 hover:bg-zinc-600' : 'bg-zinc-800 hover:bg-zinc-700') : ''}
                         ${lane.muted && isActive ? 'opacity-40' : ''}
                       `}
                       onMouseOver={isActive ? (e) => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = cat.hoverColor; } : undefined}
@@ -226,8 +193,6 @@ export function DrumGrid({
             </div>
           );
         })}
-        {/* spacer row to align with the "+ Add lane" select on the left */}
-        {pack && <div style={{ height: laneHeight + 4 }} />}
       </div>
     </div>
   );
