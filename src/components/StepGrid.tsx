@@ -1,3 +1,4 @@
+import { DRUM_MACHINE_COLOR as COLORS_DRUM_MACHINE } from '../sample-categories';
 import { useMemo, useRef, useEffect, useState, useCallback, type KeyboardEvent } from 'react';
 import type { Song, Track, GridResolution, InstalledPack } from '../types';
 import { ticksPerStep, midiNoteToName, UNPITCHED_NOTE } from '../types';
@@ -393,7 +394,7 @@ function TrackRow({
       return { color: cat.color, hoverColor: cat.hoverColor };
     }
     if (track.type === 'drum-machine') {
-      return { color: '#8855cc', hoverColor: '#9966dd' };
+      return COLORS_DRUM_MACHINE;
     }
     return SYNTH_COLOR;
   }, [track.type, sampleBrushName]);

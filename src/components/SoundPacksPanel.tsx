@@ -285,7 +285,7 @@ export function SoundPacksPanel({ open, onToggle, installedPacks, onPacksChanged
                             <button
                               onClick={() => handleSpin('respin')}
                               disabled={!!loading || pack.sampleNames.length === 0}
-                              className="px-2 py-0.5 bg-purple-700 hover:bg-purple-600 text-white text-xs rounded cursor-pointer disabled:opacity-50"
+                              className="px-2 py-0.5 bg-purple-700 hover:bg-purple-600 text-zinc-950 text-xs rounded cursor-pointer disabled:opacity-50"
                               title="Replace all samples with new random ones"
                             >
                               Re-spin
@@ -293,7 +293,7 @@ export function SoundPacksPanel({ open, onToggle, installedPacks, onPacksChanged
                             <button
                               onClick={() => handleSpin('add')}
                               disabled={!!loading}
-                              className="px-2 py-0.5 bg-purple-700 hover:bg-purple-600 text-white text-xs rounded cursor-pointer disabled:opacity-50"
+                              className="px-2 py-0.5 bg-purple-700 hover:bg-purple-600 text-zinc-950 text-xs rounded cursor-pointer disabled:opacity-50"
                               title="Add 6 more random samples"
                             >
                               Spin+
@@ -302,7 +302,7 @@ export function SoundPacksPanel({ open, onToggle, installedPacks, onPacksChanged
                         )}
                         <button
                           onClick={() => setRemoveConfirm(pack.id)}
-                          className="px-2 py-0.5 bg-zinc-700 hover:bg-red-700 text-zinc-400 hover:text-white text-xs rounded cursor-pointer shrink-0"
+                          className="px-2 py-0.5 bg-zinc-700 hover:bg-red-700 text-zinc-400 hover:text-zinc-950 text-xs rounded cursor-pointer shrink-0"
                         >
                           Remove
                         </button>
@@ -370,7 +370,7 @@ export function SoundPacksPanel({ open, onToggle, installedPacks, onPacksChanged
                       <button
                         onClick={() => handleSpin(isInstalled ? 'add' : 'fresh')}
                         disabled={!!loading}
-                        className="px-2 py-1 bg-purple-600 hover:bg-purple-500 text-white text-xs rounded cursor-pointer disabled:opacity-50"
+                        className="px-2 py-1 bg-purple-600 hover:bg-purple-500 text-zinc-950 text-xs rounded cursor-pointer disabled:opacity-50"
                       >
                         {isInstalled ? 'Spin+ 6' : 'Spin 6'}
                       </button>
@@ -380,7 +380,7 @@ export function SoundPacksPanel({ open, onToggle, installedPacks, onPacksChanged
                       <button
                         onClick={() => setConsentDialog(pack)}
                         disabled={!!loading}
-                        className="px-2 py-1 bg-purple-600 hover:bg-purple-500 text-white text-xs rounded cursor-pointer disabled:opacity-50"
+                        className="px-2 py-1 bg-purple-600 hover:bg-purple-500 text-zinc-950 text-xs rounded cursor-pointer disabled:opacity-50"
                       >
                         Download
                       </button>
@@ -441,7 +441,7 @@ export function SoundPacksPanel({ open, onToggle, installedPacks, onPacksChanged
           </div>
           <div className="flex gap-2 mt-4 justify-end">
             <button onClick={() => setConsentDialog(null)} className="px-3 py-1.5 bg-zinc-700 hover:bg-zinc-600 text-white text-sm rounded cursor-pointer">Cancel</button>
-            <button onClick={() => handleDownload(consentDialog)} className="px-3 py-1.5 bg-purple-600 hover:bg-purple-500 text-white text-sm rounded cursor-pointer">Download .zip</button>
+            <button onClick={() => handleDownload(consentDialog)} className="px-3 py-1.5 bg-purple-600 hover:bg-purple-500 text-zinc-950 text-sm rounded cursor-pointer">Download .zip</button>
           </div>
         </Dialog>
       )}
@@ -456,7 +456,7 @@ export function SoundPacksPanel({ open, onToggle, installedPacks, onPacksChanged
           </div>
           <div className="flex gap-2 mt-4 justify-end">
             <button onClick={() => { setImportDialog(false); pendingFileRef.current = null; }} className="px-3 py-1.5 bg-zinc-700 hover:bg-zinc-600 text-white text-sm rounded cursor-pointer">Cancel</button>
-            <button onClick={handleImportFile} className="px-3 py-1.5 bg-purple-600 hover:bg-purple-500 text-white text-sm rounded cursor-pointer">Import</button>
+            <button onClick={handleImportFile} className="px-3 py-1.5 bg-purple-600 hover:bg-purple-500 text-zinc-950 text-sm rounded cursor-pointer">Import</button>
           </div>
         </Dialog>
       )}
@@ -476,7 +476,7 @@ export function SoundPacksPanel({ open, onToggle, installedPacks, onPacksChanged
           </div>
           <div className="flex gap-2 mt-4 justify-end">
             <button onClick={() => { setUrlDialog(false); setUrlInput(''); }} className="px-3 py-1.5 bg-zinc-700 hover:bg-zinc-600 text-white text-sm rounded cursor-pointer">Cancel</button>
-            <button onClick={handleLoadFromUrl} disabled={!urlInput} className="px-3 py-1.5 bg-purple-600 hover:bg-purple-500 text-white text-sm rounded cursor-pointer disabled:opacity-50">Download</button>
+            <button onClick={handleLoadFromUrl} disabled={!urlInput} className="px-3 py-1.5 bg-purple-600 hover:bg-purple-500 text-zinc-950 text-sm rounded cursor-pointer disabled:opacity-50">Download</button>
           </div>
         </Dialog>
       )}
@@ -487,7 +487,7 @@ export function SoundPacksPanel({ open, onToggle, installedPacks, onPacksChanged
           <p className="text-sm text-zinc-300">Are you sure you want to remove this sound pack? Any tracks using its samples will lose their audio.</p>
           <div className="flex gap-2 mt-4 justify-end">
             <button onClick={() => setRemoveConfirm(null)} className="px-3 py-1.5 bg-zinc-700 hover:bg-zinc-600 text-white text-sm rounded cursor-pointer">Cancel</button>
-            <button onClick={() => handleRemove(removeConfirm)} className="px-3 py-1.5 bg-red-600 hover:bg-red-500 text-white text-sm rounded cursor-pointer">Remove</button>
+            <button onClick={() => handleRemove(removeConfirm)} className="px-3 py-1.5 bg-red-600 hover:bg-red-500 text-zinc-950 text-sm rounded cursor-pointer">Remove</button>
           </div>
         </Dialog>
       )}

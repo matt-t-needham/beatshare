@@ -283,7 +283,7 @@ function App() {
             </p>
             <div className="flex gap-2 justify-end">
               <button onClick={() => setMissingDialog(null)} className="px-3 py-1.5 bg-zinc-700 hover:bg-zinc-600 text-white text-sm rounded cursor-pointer">Skip</button>
-              <button onClick={handleFetchMissing} className="px-3 py-1.5 bg-purple-600 hover:bg-purple-500 text-white text-sm rounded cursor-pointer">Download</button>
+              <button onClick={handleFetchMissing} className="px-3 py-1.5 bg-purple-600 hover:bg-purple-500 text-zinc-950 text-sm rounded cursor-pointer">Download</button>
             </div>
           </div>
         </div>

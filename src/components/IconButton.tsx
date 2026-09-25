@@ -20,14 +20,14 @@ function classesFor(variant: IconButtonVariant, active: boolean): string {
   const base = 'w-5 h-5 rounded cursor-pointer flex items-center justify-center border shrink-0';
   if (active) {
     switch (variant) {
-      case 'mute':   return `${base} bg-yellow-600 text-white border-yellow-500`;
-      case 'solo':   return `${base} bg-blue-600 text-white border-blue-500`;
-      case 'danger': return `${base} bg-red-600 text-white border-red-500`;
+      case 'mute':   return `${base} bg-yellow-600 text-zinc-950 border-yellow-500`;
+      case 'solo':   return `${base} bg-blue-600 text-zinc-950 border-blue-500`;
+      case 'danger': return `${base} bg-red-600 text-zinc-950 border-red-500`;
       case 'action': return `${base} bg-zinc-600 text-white border-zinc-500`;
     }
   }
   switch (variant) {
-    case 'danger': return `${base} bg-zinc-700 text-zinc-300 hover:bg-red-700 hover:text-white border-zinc-600`;
+    case 'danger': return `${base} bg-zinc-700 text-zinc-300 hover:bg-red-700 hover:text-zinc-950 border-zinc-600`;
     case 'mute':
     case 'solo':
     case 'action':

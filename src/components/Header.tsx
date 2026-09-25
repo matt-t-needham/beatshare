@@ -102,8 +102,8 @@ export function Header({ store, playing, onPlay, onStop, onShare, onSaveFile, on
           onClick={playing ? onStop : onPlay}
           className={`px-4 py-1.5 rounded font-medium text-sm cursor-pointer ${
             playing
-              ? 'bg-red-600 hover:bg-red-500 text-white'
-              : 'bg-green-600 hover:bg-green-500 text-white'
+              ? 'bg-red-600 hover:bg-red-500 text-zinc-950'
+              : 'bg-green-600 hover:bg-green-500 text-zinc-950'
           }`}
         >
           {playing ? 'Stop' : 'Play'}
@@ -209,7 +209,7 @@ export function Header({ store, playing, onPlay, onStop, onShare, onSaveFile, on
           }}
           className={`px-3 py-1.5 text-sm rounded font-medium cursor-pointer ${
             confirmClear
-              ? 'bg-red-600 hover:bg-red-500 text-white'
+              ? 'bg-red-600 hover:bg-red-500 text-zinc-950'
               : 'bg-zinc-700 hover:bg-zinc-600 text-zinc-300'
           }`}
         >

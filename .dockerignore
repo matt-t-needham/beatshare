@@ -1,0 +1,10 @@
+.git
+.gitignore
+.claude
+.DS_Store
+node_modules
+dist
+README.md
+PRD.md
+PROMPT.md
+vercel.json

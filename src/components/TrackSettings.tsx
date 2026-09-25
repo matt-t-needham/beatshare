@@ -83,7 +83,7 @@ function WaveSelector({ value, onChange }: { value: Waveform; onChange: (w: Wave
             <svg width="16" height="12" viewBox="0 0 20 16" fill="none">
               <path
                 d={WAVE_PATHS[w]}
-                stroke={value === w ? '#fff' : '#a1a1aa'}
+                stroke={value === w ? '#11111b' : '#9399b2'}
                 strokeWidth="1.5"
                 fill="none"
                 strokeLinecap="round"

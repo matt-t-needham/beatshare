@@ -1,5 +1,51 @@
 @import "tailwindcss";
 
+/* The suite palette (bix-infra/CLAUDE.md, "Design system"). The components
+   use Tailwind's zinc greys and purple accent; rather than rewrite every
+   class, those scales are mapped onto the shared tokens from
+   https://bix.computer/bix.css (linked in index.html), each with a literal
+   Catppuccin Mocha fallback. "purple" is now the peach accent. */
+@theme {
+  --font-sans: var(--bix-sans, "Helvetica Neue", Helvetica, Arial, sans-serif);
+  --font-mono: var(--bix-mono, ui-monospace, "SF Mono", Menlo, Consolas, monospace);
+
+  --color-white: var(--ctp-text, #cdd6f4);
+  --color-black: var(--ctp-crust, #11111b);
+
+  --color-zinc-50:  var(--ctp-text, #cdd6f4);
+  --color-zinc-100: var(--ctp-text, #cdd6f4);
+  --color-zinc-200: var(--ctp-subtext1, #bac2de);
+  --color-zinc-300: var(--ctp-subtext0, #a6adc8);
+  --color-zinc-400: var(--ctp-overlay2, #9399b2);
+  --color-zinc-500: var(--ctp-overlay1, #7f849c);
+  --color-zinc-600: var(--ctp-surface2, #585b70);
+  --color-zinc-700: var(--ctp-surface1, #45475a);
+  --color-zinc-800: var(--ctp-surface0, #313244);
+  --color-zinc-900: var(--ctp-mantle, #181825);
+  --color-zinc-950: var(--ctp-base, #1e1e2e);
+
+  --color-purple-300: color-mix(in srgb, var(--ctp-peach, #fab387) 70%, white);
+  --color-purple-400: var(--ctp-peach, #fab387);
+  --color-purple-500: var(--ctp-peach, #fab387);
+  --color-purple-600: var(--ctp-peach, #fab387);
+  --color-purple-700: color-mix(in srgb, var(--ctp-peach, #fab387) 85%, var(--ctp-crust, #11111b));
+  --color-purple-900: color-mix(in srgb, var(--ctp-peach, #fab387) 40%, var(--ctp-crust, #11111b));
+
+  --color-red-500: var(--ctp-red, #f38ba8);
+  --color-red-600: var(--ctp-red, #f38ba8);
+  --color-red-700: color-mix(in srgb, var(--ctp-red, #f38ba8) 80%, var(--ctp-crust, #11111b));
+  --color-green-300: var(--ctp-green, #a6e3a1);
+  --color-green-400: var(--ctp-green, #a6e3a1);
+  --color-green-500: var(--ctp-green, #a6e3a1);
+  --color-green-600: color-mix(in srgb, var(--ctp-green, #a6e3a1) 85%, var(--ctp-crust, #11111b));
+  --color-green-800: color-mix(in srgb, var(--ctp-green, #a6e3a1) 45%, var(--ctp-crust, #11111b));
+  --color-yellow-500: var(--ctp-yellow, #f9e2af);
+  --color-yellow-600: color-mix(in srgb, var(--ctp-yellow, #f9e2af) 85%, var(--ctp-crust, #11111b));
+  --color-blue-500: var(--ctp-blue, #89b4fa);
+  --color-blue-600: color-mix(in srgb, var(--ctp-blue, #89b4fa) 85%, var(--ctp-crust, #11111b));
+}
+
+
 /* Custom scrollbar for grid scroll */
 .grid-scrollbar::-webkit-scrollbar {
   height: 6px;
@@ -39,26 +85,26 @@
   appearance: none;
   width: 12px;
   height: 12px;
-  background: #a78bfa;
+  background: var(--color-purple-400);
   border-radius: 50%;
   cursor: pointer;
   border: none;
   transition: background-color 120ms;
 }
 .slider-thin::-webkit-slider-thumb:hover {
-  background: #c4b5fd;
+  background: var(--color-purple-300);
 }
 .slider-thin::-moz-range-thumb {
   width: 12px;
   height: 12px;
-  background: #a78bfa;
+  background: var(--color-purple-400);
   border-radius: 50%;
   cursor: pointer;
   border: none;
   transition: background-color 120ms;
 }
 .slider-thin::-moz-range-thumb:hover {
-  background: #c4b5fd;
+  background: var(--color-purple-300);
 }
 .slider-thin::-moz-range-track {
   background: rgba(255, 255, 255, 0.1);

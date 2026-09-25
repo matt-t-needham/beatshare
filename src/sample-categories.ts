@@ -7,28 +7,27 @@ export interface SampleCategory {
   sortOrder: number;
 }
 
-// Neon Jungle Night palette + extensions
-// Core:  #23ce6b (green), #272d2d (dark), #f6f8ff (white), #a846a0 (magenta), #50514f (grey)
-// Extended with complementary neon tones
+// Catppuccin Mocha accents (the suite palette, see bix-infra/CLAUDE.md
+// "Design system"). Keys keep the old hue names; hover is 30% toward white.
 const COLORS = {
-  green:    { color: '#23ce6b', hoverColor: '#2ee67a' },
-  magenta:  { color: '#a846a0', hoverColor: '#bf52b6' },
-  coral:    { color: '#e05555', hoverColor: '#e87070' },
-  blue:     { color: '#4488ee', hoverColor: '#5a9bf5' },
-  yellow:   { color: '#d4c844', hoverColor: '#e0d65a' },
-  amber:    { color: '#cc9933', hoverColor: '#d9aa44' },
-  teal:     { color: '#33bbaa', hoverColor: '#44ccbb' },
-  pink:     { color: '#e066a0', hoverColor: '#e880b0' },
-  orange:   { color: '#dd7733', hoverColor: '#e88844' },
-  sky:      { color: '#44aadd', hoverColor: '#55bbee' },
-  violet:   { color: '#8855cc', hoverColor: '#9966dd' },
-  lime:     { color: '#88cc33', hoverColor: '#99dd44' },
-  indigo:   { color: '#5566cc', hoverColor: '#6677dd' },
-  rose:     { color: '#cc4466', hoverColor: '#dd5577' },
-  cyan:     { color: '#33cccc', hoverColor: '#44dddd' },
-  fuchsia:  { color: '#cc44bb', hoverColor: '#dd55cc' },
-  slate:    { color: '#778899', hoverColor: '#8899aa' },
-  grey:     { color: '#50514f', hoverColor: '#666766' },
+  green:    { color: '#a6e3a1', hoverColor: '#c1ebbd' },
+  magenta:  { color: '#f5c2e7', hoverColor: '#f8d4ee' },
+  coral:    { color: '#f38ba8', hoverColor: '#f7aec2' },
+  blue:     { color: '#89b4fa', hoverColor: '#accafc' },
+  yellow:   { color: '#f9e2af', hoverColor: '#fbebc7' },
+  amber:    { color: '#fab387', hoverColor: '#fccaab' },
+  teal:     { color: '#94e2d5', hoverColor: '#b4ebe2' },
+  pink:     { color: '#f2cdcd', hoverColor: '#f6dcdc' },
+  orange:   { color: '#fab387', hoverColor: '#fccaab' },
+  sky:      { color: '#89dceb', hoverColor: '#ace6f1' },
+  violet:   { color: '#cba6f7', hoverColor: '#dbc1f9' },
+  lime:     { color: '#a6e3a1', hoverColor: '#c1ebbd' },
+  indigo:   { color: '#b4befe', hoverColor: '#cad2fe' },
+  rose:     { color: '#eba0ac', hoverColor: '#f1bcc5' },
+  cyan:     { color: '#74c7ec', hoverColor: '#9ed8f2' },
+  fuchsia:  { color: '#f5c2e7', hoverColor: '#f8d4ee' },
+  slate:    { color: '#9399b2', hoverColor: '#b3b8c9' },
+  grey:     { color: '#585b70', hoverColor: '#8a8c9b' },
 };
 
 const CATEGORIES: SampleCategory[] = [
@@ -59,6 +58,7 @@ const CATEGORIES: SampleCategory[] = [
 
 // Synth track default color
 export const SYNTH_COLOR = COLORS.magenta;
+export const DRUM_MACHINE_COLOR = COLORS.violet;
 
 const CATEGORY_MAP = new Map(CATEGORIES.map(c => [c.id, c]));
 
