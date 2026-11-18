@@ -1,5 +1,7 @@
 # CLAUDE.md — beatshare
 
+Stack: Vite 8, React 19, TypeScript, Tone.js.
+
 Browser step sequencer at `beatshare.bix.computer` (compose service
 `beatshare`, port 3004). Serverless: the entire song lives in the URL hash
 fragment, lz-string compressed. No backend.
